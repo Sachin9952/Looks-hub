@@ -52,6 +52,11 @@ app.use('/api/gallery', galleryRoutes)
 app.use('/api/testimonials', testimonialRoutes)
 app.use('/api/dashboard', dashboardRoutes)
 
+// Base Welcome Route
+app.get('/', (req, res) => {
+  res.json({ message: "Welcome to Look's Hub Unisex Salon API", status: "Running" })
+})
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'Server is running' })
