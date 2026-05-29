@@ -33,7 +33,7 @@ export function Contact() {
             src="https://maps.google.com/maps?q=Look's%20Hub%20Unisex%20Salon%20%26%20Academy%20Silicon%20City%20Indore&t=&z=15&ie=UTF8&iwloc=&output=embed"
             className="absolute inset-0 w-full h-full"
             loading="lazy"
-            allowFullScreen=""
+            allowFullScreen
             referrerPolicy="no-referrer-when-downgrade"
           />
         </div>
