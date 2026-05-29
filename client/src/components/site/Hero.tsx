@@ -133,7 +133,7 @@ export function Hero() {
           initial={{ opacity: 0, y: 30, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 0.9, delay: 0.6, type: "spring", stiffness: 100, damping: 20 }}
-          className="absolute bottom-16 md:bottom-20 right-6 md:right-10 w-72 md:w-80 px-6 py-5 rounded-2xl bg-white/10 backdrop-blur-xl border border-white/20 shadow-[0_12px_48px_rgba(0,0,0,0.3)]"
+          className="hidden md:block absolute bottom-16 md:bottom-20 right-6 md:right-10 w-72 md:w-80 px-6 py-5 rounded-2xl bg-white/10 backdrop-blur-xl border border-white/20 shadow-[0_12px_48px_rgba(0,0,0,0.3)]"
         >
           <div className="flex items-start gap-3">
             <div className="flex-shrink-0 w-10 h-10 rounded-full bg-[color:var(--gold)]/20 flex items-center justify-center">
