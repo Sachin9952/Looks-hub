@@ -29,6 +29,15 @@
   }
 }
 
+@keyframes subtleZoom {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.02);
+  }
+}
+
 .animate-fade-in {
   animation: fadeIn 0.5s ease-in-out;
 }
@@ -39,4 +48,8 @@
 
 .animate-slide-down {
   animation: slideDown 0.5s ease-out;
+}
+
+.animate-subtle-zoom {
+  animation: subtleZoom 20s ease-in-out infinite alternate;
 }

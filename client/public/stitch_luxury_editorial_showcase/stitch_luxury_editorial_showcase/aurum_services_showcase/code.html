@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Services - Aurum Salon</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@300;400;600&amp;family=Playfair+Display:wght@400;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+        }
+        
+        /* Smooth scrolling for anchor links if any */
+        html { scroll-behavior: smooth; }
+
+        /* Subtle noise texture for depth */
+        .bg-noise {
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.03'/%3E%3C/svg%3E");
+            pointer-events: none;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "error": "#ffb4ab",
+                        "primary-fixed": "#ffdea5",
+                        "on-primary": "#412d00",
+                        "on-tertiary-fixed-variant": "#454747",
+                        "secondary": "#d7c3b5",
+                        "background": "#151312",
+                        "on-background": "#e7e1df",
+                        "surface-tint": "#e9c176",
+                        "secondary-container": "#54463c",
+                        "primary": "#e9c176",
+                        "surface-container": "#211f1e",
+                        "on-secondary-fixed": "#241911",
+                        "surface-dim": "#151312",
+                        "outline-variant": "#4e4639",
+                        "on-primary-fixed-variant": "#5d4201",
+                        "surface-variant": "#373433",
+                        "tertiary-container": "#a5a5a5",
+                        "surface-container-low": "#1d1b1a",
+                        "surface-container-highest": "#373433",
+                        "surface-container-lowest": "#100e0d",
+                        "tertiary-fixed": "#e2e2e2",
+                        "on-primary-fixed": "#261900",
+                        "tertiary": "#c6c6c6",
+                        "on-error": "#690005",
+                        "secondary-fixed-dim": "#d7c3b5",
+                        "inverse-primary": "#775a19",
+                        "on-secondary-fixed-variant": "#52443a",
+                        "surface-bright": "#3b3937",
+                        "inverse-surface": "#e7e1df",
+                        "tertiary-fixed-dim": "#c6c6c6",
+                        "on-surface-variant": "#d1c5b4",
+                        "primary-fixed-dim": "#e9c176",
+                        "primary-container": "#c5a059",
+                        "on-surface": "#e7e1df",
+                        "on-secondary": "#3a2e24",
+                        "surface-container-high": "#2c2928",
+                        "surface": "#151312",
+                        "on-error-container": "#ffdad6",
+                        "secondary-fixed": "#f4dfd0",
+                        "outline": "#9a8f80",
+                        "on-tertiary-fixed": "#1a1c1c",
+                        "on-secondary-container": "#c8b5a7",
+                        "inverse-on-surface": "#32302f",
+                        "on-tertiary": "#2f3131",
+                        "on-primary-container": "#4e3700",
+                        "on-tertiary-container": "#393b3b",
+                        "error-container": "#93000a"
+                    },
+                    borderRadius: {
+                        "DEFAULT": "1rem",
+                        "lg": "2rem",
+                        "xl": "3rem",
+                        "full": "9999px"
+                    },
+                    spacing: {
+                        "stack-md": "24px",
+                        "margin-desktop": "80px",
+                        "stack-sm": "8px",
+                        "section-padding": "120px",
+                        "gutter": "32px",
+                        "margin-mobile": "20px",
+                        "stack-lg": "48px"
+                    },
+                    fontFamily: {
+                        "body-lg": ["Hanken Grotesk"],
+                        "headline-xl": ["Playfair Display"],
+                        "headline-lg": ["Playfair Display"],
+                        "label-caps": ["Hanken Grotesk"],
+                        "body-md": ["Hanken Grotesk"],
+                        "headline-lg-mobile": ["Playfair Display"]
+                    },
+                    fontSize: {
+                        "body-lg": ["18px", { "lineHeight": "1.6", "fontWeight": "300" }],
+                        "headline-xl": ["72px", { "lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "400" }],
+                        "headline-lg": ["48px", { "lineHeight": "1.2", "fontWeight": "400" }],
+                        "label-caps": ["12px", { "lineHeight": "1.4", "letterSpacing": "0.15em", "fontWeight": "600" }],
+                        "body-md": ["16px", { "lineHeight": "1.6", "fontWeight": "400" }],
+                        "headline-lg-mobile": ["36px", { "lineHeight": "1.2", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-background text-on-background font-body-md antialiased relative selection:bg-primary selection:text-on-primary">
+<!-- Global Noise Texture Overlay -->
+<div class="fixed inset-0 bg-noise z-0"></div>
+<!-- SHARED COMPONENT: TopNavBar -->
+<nav class="fixed top-0 w-full z-50 bg-background/80 backdrop-blur-xl border-b border-secondary/30 transition-all duration-300">
+<div class="flex justify-between items-center px-margin-mobile md:px-margin-desktop h-24 w-full max-w-[1440px] mx-auto">
+<!-- Brand -->
+<a class="font-headline-lg text-headline-lg-mobile md:text-headline-lg tracking-tighter text-primary" href="#">
+                AURUM SALON
+            </a>
+<!-- Desktop Navigation -->
+<div class="hidden md:flex items-center space-x-gutter">
+<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-primary transition-colors duration-300" href="#">Collections</a>
+<!-- Active Navigation Item -->
+<a class="font-label-caps text-label-caps text-primary border-b border-primary pb-1 scale-105 transition-transform duration-200" href="#">Services</a>
+<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-primary transition-colors duration-300" href="#">Reservations</a>
+<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-primary transition-colors duration-300" href="#">The Studio</a>
+</div>
+<!-- Trailing Action & Mobile Menu Toggle -->
+<div class="flex items-center space-x-stack-md">
+<a class="hidden md:inline-flex items-center justify-center px-8 py-3 rounded-full bg-primary text-on-primary font-label-caps text-label-caps hover:scale-105 transition-transform duration-300" href="#">
+                    Book Now
+                </a>
+<button class="md:hidden text-primary p-2">
+<span class="material-symbols-outlined text-2xl">menu</span>
+</button>
+</div>
+</div>
+</nav>
+<!-- MAIN CONTENT -->
+<main class="relative z-10 w-full max-w-[1440px] mx-auto px-margin-mobile md:px-margin-desktop pt-[160px] pb-section-padding">
+<!-- Hero Header -->
+<header class="mb-section-padding md:w-3/4 max-w-4xl">
+<h1 class="font-headline-xl text-headline-lg-mobile md:text-headline-xl text-primary mb-stack-md">
+                The Aurum Collections
+            </h1>
+<p class="font-body-lg text-body-lg text-on-surface-variant max-w-2xl">
+                Bespoke beauty rituals designed to elevate your natural radiance and restore inner harmony. Experience unparalleled artistry in a sanctuary of modern luxury.
+            </p>
+</header>
+<!-- Services Editorial Spread -->
+<div class="space-y-[160px]">
+<!-- Service 1: Signature Hair Artistry -->
+<section class="grid grid-cols-1 md:grid-cols-12 gap-gutter items-center">
+<div class="md:col-span-7 group relative overflow-hidden rounded-DEFAULT">
+<div class="absolute inset-0 bg-primary/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500 z-10"></div>
+<img alt="Signature Hair Artistry" class="w-full aspect-[4/3] object-cover transition-transform duration-700 group-hover:scale-105 filter brightness-90" data-alt="A cinematic, ultra-high-definition capture of a luxurious salon workstation. The scene features a sleek, dark stone countertop with minimalist styling tools meticulously arranged. A vintage-inspired, ornate gold-framed mirror reflects soft, warm, diffused lighting. The overall mood is serene and exclusive, fitting a 'New Luxury' aesthetic. Deep shadows contrast with subtle metallic gold accents, creating an intimate, high-end editorial atmosphere." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCGsprpMD6XO0zqCxc5hF_jlJXylhNfM4oCj7oZok-s6UGsQbXAqVUOX3lxN4QgcWlYoUT83A3gFYbWSj1NsqwsVkEunhYmnYiqHSADmdlsDW-JPQvyhDGNRtRXL2hs2BzwA0stleFX-7zdAETl2--qMheOZzEaHeetPBx_umJEbtQglRvtIlcuXsrtb7N086ShHXlvHcRg_49AHbVe1ecJEe5rYXaDyUPAExwZ12OpH9E0ex3PeLPssuwF76qhggaCtTaWd5vnv3Fq"/>
+</div>
+<div class="md:col-span-4 md:col-start-9 flex flex-col justify-center mt-stack-lg md:mt-0">
+<span class="font-label-caps text-label-caps text-primary tracking-widest mb-stack-sm block">01 / Collection</span>
+<h2 class="font-headline-lg text-headline-lg-mobile md:text-headline-lg text-on-background mb-stack-md">Signature Hair Artistry</h2>
+<p class="font-body-md text-body-md text-on-surface-variant mb-stack-md">
+                        Masterful cut, color, and styling tailored to your unique features and lifestyle. Our stylists utilize avant-garde techniques and nourishing botanical formulas to achieve effortless, lasting elegance.
+                    </p>
+<div class="flex items-end justify-between border-b border-surface-variant pb-stack-sm mb-stack-lg">
+<span class="font-label-caps text-label-caps text-on-surface-variant uppercase">Starting From</span>
+<span class="font-body-lg text-body-lg text-primary">$150</span>
+</div>
+<a class="group inline-flex items-center space-x-2 w-max text-primary hover:text-primary-fixed transition-colors" href="#">
+<span class="font-label-caps text-label-caps">Explore Collection</span>
+<span class="material-symbols-outlined transform group-hover:translate-x-1 transition-transform">arrow_right_alt</span>
+</a>
+</div>
+</section>
+<!-- Service 2: Rejuvenating Skin Rituals -->
+<section class="grid grid-cols-1 md:grid-cols-12 gap-gutter items-center">
+<div class="md:col-span-4 flex flex-col justify-center order-2 md:order-1 mt-stack-lg md:mt-0">
+<span class="font-label-caps text-label-caps text-primary tracking-widest mb-stack-sm block">02 / Therapy</span>
+<h2 class="font-headline-lg text-headline-lg-mobile md:text-headline-lg text-on-background mb-stack-md">Rejuvenating Skin Rituals</h2>
+<p class="font-body-md text-body-md text-on-surface-variant mb-stack-md">
+                        Advanced facial treatments merging clinical efficacy with deep relaxation. We curate bespoke skin therapies using high-performance serums and restorative massage to illuminate your complexion.
+                    </p>
+<div class="flex items-end justify-between border-b border-surface-variant pb-stack-sm mb-stack-lg">
+<span class="font-label-caps text-label-caps text-on-surface-variant uppercase">Starting From</span>
+<span class="font-body-lg text-body-lg text-primary">$210</span>
+</div>
+<a class="group inline-flex items-center space-x-2 w-max text-primary hover:text-primary-fixed transition-colors" href="#">
+<span class="font-label-caps text-label-caps">Explore Rituals</span>
+<span class="material-symbols-outlined transform group-hover:translate-x-1 transition-transform">arrow_right_alt</span>
+</a>
+</div>
+<div class="md:col-span-7 md:col-start-6 group relative overflow-hidden rounded-DEFAULT order-1 md:order-2">
+<div class="absolute inset-0 bg-primary/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500 z-10"></div>
+<img alt="Rejuvenating Skin Rituals" class="w-full aspect-[4/5] md:aspect-[3/4] object-cover transition-transform duration-700 group-hover:scale-105 filter brightness-90" data-alt="A close-up, highly detailed view of premium skincare products arranged on a dimly lit, dark marble slab. The aesthetic is modern minimalism meets high fashion. Soft, ambient lighting creates gentle highlights on frosted glass bottles and gold-capped jars. The background is softly blurred to emphasize the textures of the stone and the sleek packaging. The scene evokes tranquility, purity, and scientific elegance in a luxury spa setting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAjCZUcdDqT5sEkyKO2_Bk_xgmYqndVVBt78Al1BOX-DKtby0LfH3sGE3XIbDRzlcz4OfE4piHIvc2-IRSTkgYbKLUy40xhEpLhU-K-f5eLCnHAuWKue1AWaXX5J7adUIWliZnhSvfHZMy13LllSF6Boq6W0734fxFLmczfiSdR34BUIDA_-Zk85L3wsMAUlN5oxTR-Tlt2E_lT9p_3gM7vaQoZmz97x52LmCK-33Vyjk4TGhKCEN6d-yGU9Noiq-Y7h6rwwoMVDg7G"/>
+</div>
+</section>
+<!-- Service 3: Hand & Foot Couture -->
+<section class="grid grid-cols-1 md:grid-cols-12 gap-gutter items-center">
+<div class="md:col-span-7 group relative overflow-hidden rounded-DEFAULT">
+<div class="absolute inset-0 bg-primary/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500 z-10"></div>
+<img alt="Hand &amp; Foot Couture" class="w-full aspect-[4/3] object-cover transition-transform duration-700 group-hover:scale-105 filter brightness-90" data-alt="A sophisticated, editorial-style photograph of a minimalist manicure station. The setting is moody and dark, featuring a matte black surface adorned with a few carefully selected tools and a small, delicate vase holding dried botanicals. The lighting is focused, casting long, elegant shadows and highlighting the metallic sheen of a gold instrument tray. The atmosphere is quiet, refined, and meticulously clean, embodying modern luxury." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCgkWyn8KV520tZaK2VGLIlyHED9w5A0-M3xUClugpX_ury5lhz1maMcRRKi_34YqDNlZX6ffYR2MdSHl8XyA3bU5s-LT-kICm84XgWp0jaIe08dtRn2VqcRciuz7j6Gwble38EySqYgwNjoavV1-DwLOIvcwF_NMoK6j1tp8L2SKSJIkw4jNTPOGvdoss3SZqOVv4OoK6X2GOt-W0SNF8ulHLPpVbHfCb1pGb2MP7_ne5TZMZeQih2BpCZbgOqyINbsU8Pfq-oPOVA"/>
+</div>
+<div class="md:col-span-4 md:col-start-9 flex flex-col justify-center mt-stack-lg md:mt-0">
+<span class="font-label-caps text-label-caps text-primary tracking-widest mb-stack-sm block">03 / Detail</span>
+<h2 class="font-headline-lg text-headline-lg-mobile md:text-headline-lg text-on-background mb-stack-md">Hand &amp; Foot Couture</h2>
+<p class="font-body-md text-body-md text-on-surface-variant mb-stack-md">
+                        Meticulous nail care elevated to an art form. Indulge in extended massage, restorative hydration masks, and precision lacquer application in a serene, private enclave.
+                    </p>
+<div class="flex items-end justify-between border-b border-surface-variant pb-stack-sm mb-stack-lg">
+<span class="font-label-caps text-label-caps text-on-surface-variant uppercase">Starting From</span>
+<span class="font-body-lg text-body-lg text-primary">$85</span>
+</div>
+<a class="group inline-flex items-center space-x-2 w-max text-primary hover:text-primary-fixed transition-colors" href="#">
+<span class="font-label-caps text-label-caps">Explore Detail</span>
+<span class="material-symbols-outlined transform group-hover:translate-x-1 transition-transform">arrow_right_alt</span>
+</a>
+</div>
+</section>
+<!-- Service 4: The Gentlemen's Suite -->
+<section class="grid grid-cols-1 md:grid-cols-12 gap-gutter items-center">
+<div class="md:col-span-4 flex flex-col justify-center order-2 md:order-1 mt-stack-lg md:mt-0">
+<span class="font-label-caps text-label-caps text-primary tracking-widest mb-stack-sm block">04 / Grooming</span>
+<h2 class="font-headline-lg text-headline-lg-mobile md:text-headline-lg text-on-background mb-stack-md">The Gentlemen's Suite</h2>
+<p class="font-body-md text-body-md text-on-surface-variant mb-stack-md">
+                        A dedicated retreat for precision barbering. Experience traditional hot towel shaves, architectural beard sculpting, and tailored men's styling surrounded by rich, masculine textures.
+                    </p>
+<div class="flex items-end justify-between border-b border-surface-variant pb-stack-sm mb-stack-lg">
+<span class="font-label-caps text-label-caps text-on-surface-variant uppercase">Starting From</span>
+<span class="font-body-lg text-body-lg text-primary">$120</span>
+</div>
+<a class="group inline-flex items-center space-x-2 w-max text-primary hover:text-primary-fixed transition-colors" href="#">
+<span class="font-label-caps text-label-caps">Explore Suite</span>
+<span class="material-symbols-outlined transform group-hover:translate-x-1 transition-transform">arrow_right_alt</span>
+</a>
+</div>
+<div class="md:col-span-7 md:col-start-6 group relative overflow-hidden rounded-DEFAULT order-1 md:order-2">
+<div class="absolute inset-0 bg-primary/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500 z-10"></div>
+<img alt="The Gentlemen's Suite" class="w-full aspect-[4/5] md:aspect-[3/4] object-cover transition-transform duration-700 group-hover:scale-105 filter brightness-90" data-alt="An atmospheric, masculine grooming space captured in high resolution. The focal point is a vintage, dark leather barber chair set against a backdrop of dark wood paneling and subtle marble textures. Warm, golden light spills from an unseen source, illuminating fine details like a straight razor and a shaving brush on a nearby minimalist stand. The composition is strong and classic, radiating exclusivity and timeless elegance within a dark luxury context." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB-6mXb41j_YXGW0Xh_olLpZhNcfvATIZy_EiICITVJBuH1WZtJKxGUrAbohSQ7pqXzi2rlcBLqPkzkoafDmBFNbu0upFEeaH86EBQX6pbBDqVLnZQS-1RsuT-NQAODu3QO1SUgzMwwhPtVW9yjaFbGxPgae3Q9_Ui1z9Z_5duEqmN4fxt-MRt9eEnzrEn5YCuAD7VUJGQIVEdpHvV-rbxoRQUtYRsPqRq9vuFAh8l-Ejt25XN-I1ml5S8J0cR-uQYMbOi__eqnc4wV"/>
+</div>
+</section>
+</div>
+</main>
+<!-- SHARED COMPONENT: Footer -->
+<footer class="bg-surface-container-lowest w-full mt-section-padding">
+<div class="flex flex-col md:flex-row justify-between items-center px-margin-mobile md:px-margin-desktop py-stack-lg w-full max-w-[1440px] mx-auto border-t border-surface-variant/30">
+<!-- Brand Logo -->
+<div class="font-headline-lg text-headline-lg-mobile md:text-headline-lg text-primary mb-stack-md md:mb-0">
+                AURUM SALON
+            </div>
+<!-- Links -->
+<div class="flex flex-wrap justify-center gap-stack-md mb-stack-md md:mb-0">
+<a class="font-body-md text-body-md text-on-surface-variant hover:underline decoration-primary underline-offset-4 transition-opacity duration-300 hover:opacity-80" href="#">Privacy Policy</a>
+<a class="font-body-md text-body-md text-on-surface-variant hover:underline decoration-primary underline-offset-4 transition-opacity duration-300 hover:opacity-80" href="#">Terms of Service</a>
+<a class="font-body-md text-body-md text-on-surface-variant hover:underline decoration-primary underline-offset-4 transition-opacity duration-300 hover:opacity-80" href="#">Press Inquiries</a>
+<a class="font-body-md text-body-md text-on-surface-variant hover:underline decoration-primary underline-offset-4 transition-opacity duration-300 hover:opacity-80" href="#">Contact</a>
+</div>
+<!-- Copyright -->
+<div class="font-body-md text-body-md text-on-surface-variant text-sm opacity-60">
+                © 2024 AURUM LUXURY GRP. ALL RIGHTS RESERVED.
+            </div>
+</div>
+</footer>
+</body></html>

@@ -5,8 +5,14 @@ import { ArrowLeft, ArrowRight, Check, CalendarDays, Clock, User } from "lucide-
 import { Navbar } from "@/components/site/Navbar";
 import { Footer } from "@/components/site/Footer";
 import { services, artists } from "@/lib/data";
+import { z } from "zod";
+
+const bookSearchSchema = z.object({
+  service: z.string().optional(),
+});
 
 export const Route = createFileRoute("/book")({
+  validateSearch: (search) => bookSearchSchema.parse(search),
   head: () => ({
     meta: [
       { title: "Book Appointment · Look's Hub" },
@@ -20,11 +26,12 @@ const steps = ["Service", "Stylist", "Date & Time", "Details"];
 const times = ["10:00", "11:30", "13:00", "14:30", "16:00", "17:30", "19:00"];
 
 function BookPage() {
+  const { service } = Route.useSearch();
   const [step, setStep] = useState(0);
   const [done, setDone] = useState(false);
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState({
-    serviceId: "",
+    serviceId: service || "",
     artistId: "",
     date: "",
     time: "",
