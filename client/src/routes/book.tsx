@@ -77,6 +77,15 @@ function BookPage() {
         throw new Error(resData.message || "Failed to submit booking");
       }
 
+      if (resData.success && resData.data && resData.data._id) {
+        localStorage.setItem("looks_hub_phone", data.phone);
+        const existing = JSON.parse(localStorage.getItem("looks_hub_bookings") || "[]");
+        if (!existing.includes(resData.data._id)) {
+          existing.push(resData.data._id);
+          localStorage.setItem("looks_hub_bookings", JSON.stringify(existing));
+        }
+      }
+
       setDone(true);
     } catch (err: any) {
       console.error(err);

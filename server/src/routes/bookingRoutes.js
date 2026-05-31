@@ -1,9 +1,14 @@
 import express from 'express'
 import { body } from 'express-validator'
+import jwt from 'jsonwebtoken'
+import Admin from '../models/Admin.js'
 import {
   createBooking,
   getBookings,
   getBookingById,
+  rescheduleBooking,
+  cancelBooking,
+  reviewBooking,
   updateBookingStatus,
   deleteBooking
 } from '../controllers/bookingController.js'
@@ -12,6 +17,21 @@ import { validate } from '../middleware/validateMiddleware.js'
 
 const router = express.Router()
 
+// Optional Admin Auth Middleware for GET /api/bookings
+const optionalAdmin = async (req, res, next) => {
+  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+    try {
+      const token = req.headers.authorization.split(' ')[1]
+      const decoded = jwt.verify(token, process.env.JWT_SECRET)
+      req.admin = await Admin.findById(decoded.id).select('-password')
+    } catch (error) {
+      // Skip invalid tokens for public search queries
+    }
+  }
+  next()
+}
+
+// Public Booking Creation
 router.post(
   '/',
   [
@@ -26,9 +46,16 @@ router.post(
   createBooking
 )
 
+// Public Dashboard Queries
+router.get('/', optionalAdmin, getBookings)
+router.get('/:id', getBookingById)
+
+// Booking Actions (Public)
+router.patch('/reschedule', rescheduleBooking)
+router.patch('/cancel', cancelBooking)
+router.post('/review', reviewBooking)
+
 // Protected Admin Routes
-router.get('/', protectAdmin, getBookings)
-router.get('/:id', protectAdmin, getBookingById)
 router.patch(
   '/:id/status',
   protectAdmin,
