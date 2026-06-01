@@ -12,8 +12,8 @@ import a4 from "@/assets/artist-4.jpg";
 
 // Real Look's Hub Salon Data
 export const salonName = "Look's Hub";
-export const salonPhone = "+91 99267 07048";
-export const salonWhatsApp = "https://wa.me/919926707048";
+export const salonPhone = "+91 95163 50601";
+export const salonWhatsApp = "https://wa.me/919516350601";
 export const salonInstagram = "https://instagram.com/lookshubsalon";
 export const salonGoogleMaps = "https://maps.app.goo.gl/lookshub";
 export const salonRating = 4.9;

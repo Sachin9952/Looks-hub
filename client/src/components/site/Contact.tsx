@@ -88,7 +88,7 @@ export function Contact() {
             </a>
 
             <a
-              href="https://wa.me/919926707048?text=Hello%20Look%27s%20Hub%20Salon%2C%20I%20would%20like%20to%20book%20an%20appointment.%20Could%20you%20please%20assist%20me%3F"
+              href="https://wa.me/919516350601?text=Hello%20Look%27s%20Hub%20Salon%2C%20I%20would%20like%20to%20book%20an%20appointment.%20Could%20you%20please%20assist%20me%3F"
               target="_blank"
               rel="noopener noreferrer"
               onClick={handleWhatsAppClick}

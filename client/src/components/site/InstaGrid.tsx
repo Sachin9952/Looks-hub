@@ -1,9 +1,10 @@
-import { useRef } from "react";
+import { useRef, useState, useEffect } from "react";
 import { motion, useScroll, useTransform, useSpring } from "framer-motion";
 import { services, artists } from "@/lib/data";
+import { getImageUrl } from "@/lib/utils";
 
-// Build a varied masonry from existing assets with luxury editorial styling labels
-const tiles = [
+// Fallback tiles
+const defaultTiles = [
   { src: services[0].image, span: "row-span-2", label: "Hair Styling" },
   { src: artists[2].image, span: "", label: "Hair Color" },
   { src: services[3].image, span: "", label: "Bridal Makeup" },
@@ -16,6 +17,36 @@ const tiles = [
 ];
 
 export function InstaGrid() {
+  const [tiles, setTiles] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchGallery = async () => {
+      try {
+        const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+        const res = await fetch(`${apiUrl}/gallery`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.data && data.data.length > 0) {
+            const mapped = data.data.map((item: any, index: number) => ({
+              src: getImageUrl(item.imageUrl),
+              // Distribute row-span-2 to create the masonry layout look
+              span: index % 3 === 0 ? "row-span-2" : "",
+              label: item.title
+            }));
+            setTiles(mapped);
+            return;
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load lookbook from API:", err);
+      }
+      
+      // Fallback
+      setTiles(defaultTiles);
+    };
+    fetchGallery();
+  }, []);
+
   const headerVariants = {
     hidden: { opacity: 0, y: 40 },
     visible: { 
@@ -35,7 +66,7 @@ export function InstaGrid() {
   };
 
   return (
-    <section className="py-20 md:py-24 bg-secondary/40">
+    <section id="gallery" className="py-20 md:py-24 bg-secondary/40">
       <div className="container-luxe">
         <motion.div 
           initial="hidden"
@@ -82,7 +113,7 @@ export function InstaGrid() {
   );
 }
 
-function GalleryTile({ tile, index }: { tile: typeof tiles[0]; index: number }) {
+function GalleryTile({ tile, index }: { tile: { src: string; span: string; label: string }; index: number }) {
   const containerRef = useRef<HTMLAnchorElement>(null);
 
   const isTaller = tile.span.includes("row-span-2");

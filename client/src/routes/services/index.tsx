@@ -1,9 +1,11 @@
+import { useState, useEffect } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 import { Navbar } from "@/components/site/Navbar";
 import { Footer } from "@/components/site/Footer";
 import { servicesData } from "@/data/servicesData";
+import { getServiceImage } from "@/components/site/Services";
 
 export const Route = createFileRoute("/services/")({
   head: () => ({
@@ -16,6 +18,44 @@ export const Route = createFileRoute("/services/")({
 });
 
 function ServicesIndexPage() {
+  const [servicesList, setServicesList] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchServices = async () => {
+      try {
+        const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+        const res = await fetch(`${apiUrl}/services`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.data && data.data.length > 0) {
+            const mapped = data.data.filter((s: any) => s.isActive).map((s: any) => {
+              const staticMatch = servicesData.find(
+                (sd) => sd.title.toLowerCase() === s.name.toLowerCase()
+              );
+              return {
+                id: staticMatch?.id || s._id,
+                title: s.name,
+                category: s.category,
+                shortDescription: s.description || staticMatch?.shortDescription || s.name,
+                startingPrice: s.price,
+                duration: s.duration,
+                image: getServiceImage(s.name)
+              };
+            });
+            setServicesList(mapped);
+            return;
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load services from API:", err);
+      }
+      
+      // Fallback
+      setServicesList(servicesData);
+    };
+    fetchServices();
+  }, []);
+
   return (
     <div className="min-h-screen bg-[color:var(--cream)] text-[color:var(--charcoal)] pb-24 md:pb-0">
       <Navbar />
@@ -47,7 +87,7 @@ function ServicesIndexPage() {
           </motion.header>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 md:gap-10">
-            {servicesData.map((service, idx) => (
+            {servicesList.map((service, idx) => (
               <motion.div
                 key={service.id}
                 initial={{ opacity: 0, y: 30 }}

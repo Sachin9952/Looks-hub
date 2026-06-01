@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { motion } from "framer-motion";
+import { getImageUrl } from "@/lib/utils";
 import {
   Calendar,
   Clock,
@@ -23,6 +24,7 @@ import {
   ToggleRight,
   Eye,
   Star,
+  ChevronDown,
 } from "lucide-react";
 
 export const Route = createFileRoute("/admin/dashboard")({
@@ -72,6 +74,15 @@ interface Testimonial {
   isFeatured: boolean;
 }
 
+interface ArtistItem {
+  _id: string;
+  name: string;
+  specialty: string;
+  years: number;
+  rating: number;
+  image: string;
+}
+
 interface Stats {
   totalBookings: number;
   pendingBookings: number;
@@ -80,14 +91,32 @@ interface Stats {
   cancelledBookings: number;
   totalServices: number;
   totalTestimonials: number;
+  totalArtists?: number;
 }
 
 function AdminDashboardPage() {
-  const [activeTab, setActiveTab] = useState<"overview" | "bookings" | "services" | "gallery" | "testimonials" | "offers">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "bookings" | "services" | "gallery" | "testimonials" | "offers" | "artists">("overview");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [bookings, setBookings] = useState<Booking[]>([]);
+
+  const tabs = [
+    { value: "overview", label: "Overview", icon: <LayoutDashboard size={14} /> },
+    { value: "bookings", label: "Appointments", icon: <Calendar size={14} /> },
+    { value: "services", label: "Services", icon: <Layers size={14} /> },
+    { value: "gallery", label: "Gallery", icon: <ImageIcon size={14} /> },
+    { value: "artists", label: "Team", icon: <User size={14} /> },
+    { value: "testimonials", label: "Testimonials", icon: <MessageSquare size={14} /> },
+    { value: "offers", label: "Offers", icon: <Tag size={14} /> },
+  ] as const;
   const [servicesList, setServicesList] = useState<Service[]>([]);
   const [galleryList, setGalleryList] = useState<GalleryItem[]>([]);
   const [testimonialsList, setTestimonialsList] = useState<Testimonial[]>([]);
+  const [artistsList, setArtistsList] = useState<ArtistItem[]>([]);
+  const [showArtistForm, setShowArtistForm] = useState(false);
+  const [artistFile, setArtistFile] = useState<File | null>(null);
+  const [newArtist, setNewArtist] = useState({
+    name: "", specialty: "", years: 1, rating: 5
+  });
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -103,6 +132,7 @@ function AdminDashboardPage() {
   });
 
   const [showGalleryForm, setShowGalleryForm] = useState(false);
+  const [galleryFile, setGalleryFile] = useState<File | null>(null);
   const [newGallery, setNewGallery] = useState({
     title: "", category: "", imageUrl: "", type: "hair" as any, isFeatured: false
   });
@@ -175,6 +205,13 @@ function AdminDashboardPage() {
       if (testimonialsRes.ok) {
         const testimonialsJson = await testimonialsRes.json();
         setTestimonialsList(testimonialsJson.data);
+      }
+
+      // 6. Fetch Artists
+      const artistsRes = await fetch(`${apiUrl}/artists`);
+      if (artistsRes.ok) {
+        const artistsJson = await artistsRes.json();
+        setArtistsList(artistsJson.data);
       }
 
     } catch (err: any) {
@@ -276,14 +313,46 @@ function AdminDashboardPage() {
     e.preventDefault();
     try {
       const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+      let imageUrl = "";
+
+      if (galleryFile) {
+        const formData = new FormData();
+        formData.append("image", galleryFile);
+
+        const token = localStorage.getItem("adminToken");
+        const uploadRes = await fetch(`${apiUrl}/upload`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          body: formData,
+        });
+
+        if (!uploadRes.ok) {
+          const errorData = await uploadRes.json();
+          alert(errorData.message || "Failed to upload image");
+          return;
+        }
+
+        const uploadData = await uploadRes.json();
+        imageUrl = uploadData.url;
+      } else {
+        alert("Please select an image file to upload");
+        return;
+      }
+
       const res = await fetch(`${apiUrl}/gallery`, {
         method: "POST",
         headers: getHeaders(),
-        body: JSON.stringify(newGallery),
+        body: JSON.stringify({
+          ...newGallery,
+          imageUrl: imageUrl,
+        }),
       });
       if (res.ok) {
         setShowGalleryForm(false);
         setNewGallery({ title: "", category: "", imageUrl: "", type: "hair", isFeatured: false });
+        setGalleryFile(null);
         fetchDashboardData();
       }
     } catch (err) {
@@ -333,6 +402,73 @@ function AdminDashboardPage() {
     }
   };
 
+  // Artist Actions
+  const handleCreateArtist = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+      let uploadedImageUrl = "";
+
+      if (artistFile) {
+        const formData = new FormData();
+        formData.append("image", artistFile);
+
+        const token = localStorage.getItem("adminToken");
+        const uploadRes = await fetch(`${apiUrl}/upload`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          body: formData,
+        });
+
+        if (!uploadRes.ok) {
+          const errorData = await uploadRes.json();
+          alert(errorData.message || "Failed to upload artist photo");
+          return;
+        }
+
+        const uploadData = await uploadRes.json();
+        uploadedImageUrl = uploadData.url;
+      } else {
+        alert("Please select a profile photo for the artist");
+        return;
+      }
+
+      const res = await fetch(`${apiUrl}/artists`, {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify({
+          ...newArtist,
+          image: uploadedImageUrl,
+        }),
+      });
+      if (res.ok) {
+        setShowArtistForm(false);
+        setNewArtist({ name: "", specialty: "", years: 1, rating: 5 });
+        setArtistFile(null);
+        fetchDashboardData();
+      } else {
+        const errJson = await res.json();
+        alert(errJson.message || "Failed to add artist");
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleDeleteArtist = async (id: string) => {
+    if (!window.confirm("Remove this team member?")) return;
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+      const res = await fetch(`${apiUrl}/artists/${id}`, { method: "DELETE", headers: getHeaders() });
+      if (res.ok) fetchDashboardData();
+      else alert("Failed to remove artist");
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const filteredBookings = bookings.filter((b) => {
     if (bookingFilter === "all") return true;
     return b.status === bookingFilter;
@@ -353,6 +489,7 @@ function AdminDashboardPage() {
             <SidebarLink active={activeTab === "bookings"} label="Appointments" icon={<Calendar size={16} />} onClick={() => setActiveTab("bookings")} />
             <SidebarLink active={activeTab === "services"} label="Services" icon={<Layers size={16} />} onClick={() => setActiveTab("services")} />
             <SidebarLink active={activeTab === "gallery"} label="Gallery" icon={<ImageIcon size={16} />} onClick={() => setActiveTab("gallery")} />
+            <SidebarLink active={activeTab === "artists"} label="Team" icon={<User size={16} />} onClick={() => setActiveTab("artists")} />
             <SidebarLink active={activeTab === "testimonials"} label="Testimonials" icon={<MessageSquare size={16} />} onClick={() => setActiveTab("testimonials")} />
             <SidebarLink active={activeTab === "offers"} label="Offers & Packages" icon={<Tag size={16} />} onClick={() => setActiveTab("offers")} />
           </nav>
@@ -370,19 +507,44 @@ function AdminDashboardPage() {
         {/* Topbar Layout */}
         <header className="h-20 bg-black/20 border-b border-white/10 flex items-center justify-between px-6 md:px-8">
           <div className="flex items-center gap-4">
-            {/* Mobile Sidebar Selector */}
-            <select
-              value={activeTab}
-              onChange={(e) => setActiveTab(e.target.value as any)}
-              className="md:hidden bg-black/40 border border-white/20 rounded-lg px-3 py-1.5 text-sm text-[color:var(--gold)] focus:outline-none"
-            >
-              <option value="overview">Overview</option>
-              <option value="bookings">Appointments</option>
-              <option value="services">Services</option>
-              <option value="gallery">Gallery</option>
-              <option value="testimonials">Testimonials</option>
-              <option value="offers">Offers</option>
-            </select>
+            {/* Custom Mobile Dropdown */}
+            <div className="relative md:hidden z-50">
+              <button
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="flex items-center justify-between gap-3 bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm text-[color:var(--gold)] focus:outline-none hover:bg-black/60 transition-all font-display font-light min-w-[140px]"
+              >
+                <span>{tabs.find(t => t.value === activeTab)?.label || activeTab}</span>
+                <ChevronDown size={14} className={`transition-transform duration-300 text-white/50 ${mobileMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
+              
+              {mobileMenuOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setMobileMenuOpen(false)} />
+                  <div className="absolute left-0 mt-2 bg-neutral-900/95 border border-white/10 backdrop-blur-md rounded-2xl py-2 w-48 shadow-[0_10px_30px_rgba(0,0,0,0.8)] flex flex-col z-50 overflow-hidden">
+                    {tabs.map((tab) => {
+                      const isActive = activeTab === tab.value;
+                      return (
+                        <button
+                          key={tab.value}
+                          onClick={() => {
+                            setActiveTab(tab.value as any);
+                            setMobileMenuOpen(false);
+                          }}
+                          className={`px-4 py-2.5 text-xs flex items-center gap-3 transition-all duration-200 text-left ${
+                            isActive
+                              ? "bg-[color:var(--gold)] text-black font-semibold"
+                              : "text-white/70 hover:bg-white/5 hover:text-[color:var(--gold)]"
+                          }`}
+                        >
+                          {tab.icon}
+                          <span>{tab.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
 
             <h2 className="text-lg font-display text-white capitalize hidden md:inline">{activeTab} Manager</h2>
           </div>
@@ -460,6 +622,10 @@ function AdminDashboardPage() {
                           <div className="flex justify-between border-b border-white/5 pb-2">
                             <span className="text-white/60">Gallery Portfolio</span>
                             <span className="font-medium text-white">{galleryList.length}</span>
+                          </div>
+                          <div className="flex justify-between border-b border-white/5 pb-2">
+                            <span className="text-white/60">Active Artists/Barbers</span>
+                            <span className="font-medium text-white">{artistsList.length}</span>
                           </div>
                           <div className="flex justify-between pb-2">
                             <span className="text-white/60">Verified Reviews</span>
@@ -730,8 +896,8 @@ function AdminDashboardPage() {
                           <input required value={newGallery.category} onChange={(e) => setNewGallery({...newGallery, category: e.target.value})} placeholder="e.g. Hair color" className="mt-2 w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white" />
                         </div>
                         <div>
-                          <label className="text-xs uppercase tracking-wider text-white/50">Image URL</label>
-                          <input required value={newGallery.imageUrl} onChange={(e) => setNewGallery({...newGallery, imageUrl: e.target.value})} placeholder="Paste image url..." className="mt-2 w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white" />
+                          <label className="text-xs uppercase tracking-wider text-white/50">Image File</label>
+                          <input required type="file" accept="image/*" onChange={(e) => setGalleryFile(e.target.files ? e.target.files[0] : null)} className="mt-2 w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-[color:var(--cream)]" />
                         </div>
                         <div>
                           <label className="text-xs uppercase tracking-wider text-white/50">Service Type</label>
@@ -762,7 +928,7 @@ function AdminDashboardPage() {
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                       {galleryList.map((g) => (
                         <div key={g._id} className="relative group rounded-2xl overflow-hidden border border-white/10 bg-black/20">
-                          <img src={g.imageUrl} alt={g.title} className="aspect-square w-full h-full object-cover" />
+                          <img src={getImageUrl(g.imageUrl)} alt={g.title} className="aspect-square w-full h-full object-cover" />
                           <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 transition-opacity p-4 flex flex-col justify-between">
                             <div>
                               <p className="font-semibold text-white">{g.title}</p>
@@ -850,6 +1016,79 @@ function AdminDashboardPage() {
                             <span className="text-[10px] text-white/40 uppercase tracking-wider">{t.isFeatured ? "Featured" : "Standard"}</span>
                             <button onClick={() => handleDeleteTestimonial(t._id)} className="p-1.5 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/35 transition-colors">
                               <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Artists Tab */}
+              {activeTab === "artists" && (
+                <div className="space-y-6">
+                  <div className="flex justify-between items-center">
+                    <h3 className="font-display text-2xl text-white">Salon Team / Barbers</h3>
+                    <button onClick={() => setShowArtistForm(!showArtistForm)} className="btn-gold flex items-center gap-1.5 text-xs py-2 px-4">
+                      <Plus size={14} /> {showArtistForm ? "Cancel" : "Add Team Member"}
+                    </button>
+                  </div>
+
+                  {showArtistForm && (
+                    <form onSubmit={handleCreateArtist} className="bg-black/20 border border-white/10 rounded-3xl p-6 max-w-2xl space-y-4">
+                      <div className="grid sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-xs uppercase tracking-wider text-white/50">Full Name</label>
+                          <input required value={newArtist.name} onChange={(e) => setNewArtist({...newArtist, name: e.target.value})} placeholder="e.g. Robin Singh" className="mt-2 w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white" />
+                        </div>
+                        <div>
+                          <label className="text-xs uppercase tracking-wider text-white/50">Specialty</label>
+                          <input required value={newArtist.specialty} onChange={(e) => setNewArtist({...newArtist, specialty: e.target.value})} placeholder="e.g. Master Stylist & Colorist" className="mt-2 w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white" />
+                        </div>
+                        <div>
+                          <label className="text-xs uppercase tracking-wider text-white/50">Experience (Years)</label>
+                          <input required type="number" min="0" value={newArtist.years} onChange={(e) => setNewArtist({...newArtist, years: parseInt(e.target.value) || 0})} className="mt-2 w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white" />
+                        </div>
+                        <div>
+                          <label className="text-xs uppercase tracking-wider text-white/50">Rating (1.0 - 5.0)</label>
+                          <input required type="number" step="0.1" min="1" max="5" value={newArtist.rating} onChange={(e) => setNewArtist({...newArtist, rating: parseFloat(e.target.value) || 5.0})} className="mt-2 w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white" />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs uppercase tracking-wider text-white/50">Profile Picture</label>
+                        <input required type="file" accept="image/*" onChange={(e) => setArtistFile(e.target.files ? e.target.files[0] : null)} className="mt-2 w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-[color:var(--cream)]" />
+                      </div>
+                      <button type="submit" className="btn-gold text-xs py-2.5 px-6">Save Team Member</button>
+                    </form>
+                  )}
+
+                  {artistsList.length === 0 ? (
+                    <div className="bg-black/20 border border-white/10 rounded-3xl p-12 text-center text-white/50">
+                      No team members added yet. Click the button to add a barber/stylist.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
+                      {artistsList.map((a) => (
+                        <div key={a._id} className="bg-black/20 border border-white/10 rounded-3xl overflow-hidden shadow-[var(--shadow-soft)] flex flex-col justify-between">
+                          <div>
+                            <div className="aspect-[4/5] relative w-full overflow-hidden">
+                              <img src={getImageUrl(a.image)} alt={a.name} className="absolute inset-0 w-full h-full object-cover" />
+                            </div>
+                            <div className="p-5">
+                              <p className="font-display text-lg text-white">{a.name}</p>
+                              <p className="text-xs text-[color:var(--gold)] mt-1 font-medium">{a.specialty}</p>
+                              <div className="flex items-center gap-4 mt-4 text-xs text-white/60">
+                                <span>{a.years} years exp</span>
+                                <span className="flex items-center gap-1">
+                                  <Star size={11} className="fill-[color:var(--gold)] text-[color:var(--gold)]" /> {a.rating}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="p-5 pt-0 border-t border-white/5 mt-4 flex justify-end">
+                            <button onClick={() => handleDeleteArtist(a._id)} className="p-2 rounded-lg bg-red-500/10 hover:bg-red-500/25 text-red-400 transition-all flex items-center gap-1.5 text-xs font-semibold">
+                              <Trash2 size={14} /> Remove
                             </button>
                           </div>
                         </div>

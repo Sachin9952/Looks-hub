@@ -1,8 +1,39 @@
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Star } from "lucide-react";
-import { testimonials } from "@/lib/data";
+import { testimonials as defaultTestimonials } from "@/lib/data";
 
 export function Testimonials() {
+  const [testimonialsList, setTestimonialsList] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchTestimonials = async () => {
+      try {
+        const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+        const res = await fetch(`${apiUrl}/testimonials`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.data && data.data.length > 0) {
+            const mapped = data.data.filter((t: any) => t.isFeatured).map((t: any) => ({
+              name: t.customerName,
+              role: t.source || "Guest Review",
+              quote: t.review,
+              rating: t.rating
+            }));
+            setTestimonialsList(mapped);
+            return;
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch testimonials from API:", err);
+      }
+
+      // Fallback
+      setTestimonialsList(defaultTestimonials);
+    };
+    fetchTestimonials();
+  }, []);
+
   return (
     <section className="py-28 md:py-36">
       <div className="container-luxe">
@@ -11,9 +42,9 @@ export function Testimonials() {
           <h2 className="mt-5 font-display text-4xl md:text-6xl">Stories from our guests.</h2>
         </div>
         <div className="mt-14 grid gap-6 md:grid-cols-3">
-          {testimonials.map((t, i) => (
+          {testimonialsList.map((t, i) => (
             <motion.figure
-              key={t.name}
+              key={`${t.name}-${i}`}
               initial={{ opacity: 0, y: 24 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}

@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { ArrowLeft, ArrowRight, Check, Clock, Calendar, ShieldCheck, HelpCircle } from "lucide-react";
@@ -5,6 +6,7 @@ import { Navbar } from "@/components/site/Navbar";
 import { Footer } from "@/components/site/Footer";
 import { servicesData } from "@/data/servicesData";
 import { salonWhatsApp } from "@/lib/data";
+import { getServiceImage } from "@/components/site/Services";
 
 export const Route = createFileRoute("/services/$serviceId")({
   head: ({ params }) => {
@@ -21,9 +23,117 @@ export const Route = createFileRoute("/services/$serviceId")({
 
 function ServiceDetailPage() {
   const { serviceId } = Route.useParams();
-  
-  // Find current service
-  const service = servicesData.find((s) => s.id === serviceId);
+  const [service, setCurrentService] = useState<any>(null);
+  const [relatedServicesList, setRelatedServicesList] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadService = async () => {
+      try {
+        const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+        const res = await fetch(`${apiUrl}/services`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.data) {
+            const allDbServices = data.data;
+            // Find current service
+            const dbMatch = allDbServices.find((s: any) => s._id === serviceId || s.name.toLowerCase().replace(/[^a-z0-9]/g, "") === serviceId.toLowerCase().replace(/[^a-z0-9]/g, ""));
+            
+            if (dbMatch) {
+              const staticMatch = servicesData.find(
+                (sd) => sd.title.toLowerCase() === dbMatch.name.toLowerCase()
+              );
+              
+              const normalized = {
+                id: dbMatch._id,
+                title: dbMatch.name,
+                category: dbMatch.category,
+                fullDescription: dbMatch.description || staticMatch?.fullDescription || dbMatch.name,
+                startingPrice: dbMatch.price,
+                duration: dbMatch.duration,
+                image: getServiceImage(dbMatch.name),
+                benefits: staticMatch?.benefits || ["Premium experience", "Expert stylists"],
+                afterCareTips: staticMatch?.afterCareTips || ["Follow expert stylist advice"],
+                idealFor: staticMatch?.idealFor || ["Anyone seeking premium styling"],
+                processSteps: staticMatch?.processSteps || ["Consultation", "Treatment", "Finish"]
+              };
+              
+              // Load related services
+              const relatedSlugs = staticMatch?.relatedServices || [];
+              const relatedDbItems = allDbServices.filter((s: any) => {
+                if (s._id === dbMatch._id) return false;
+                const match = servicesData.find(sd => sd.title.toLowerCase() === s.name.toLowerCase());
+                return match && relatedSlugs.includes(match.id);
+              });
+              
+              const mappedRelated = relatedDbItems.map((s: any) => {
+                const match = servicesData.find(sd => sd.title.toLowerCase() === s.name.toLowerCase());
+                return {
+                  id: s._id,
+                  title: s.name,
+                  category: s.category,
+                  shortDescription: s.description || match?.shortDescription || s.name,
+                  startingPrice: s.price,
+                  duration: s.duration,
+                  image: getServiceImage(s.name)
+                };
+              });
+
+              setCurrentService(normalized);
+              setRelatedServicesList(mappedRelated);
+              setLoading(false);
+              return;
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load service detail from API:", err);
+      }
+
+      // Static fallback
+      const staticMatch = servicesData.find((s) => s.id === serviceId);
+      if (staticMatch) {
+        setCurrentService({
+          id: staticMatch.id,
+          title: staticMatch.title,
+          category: staticMatch.category,
+          fullDescription: staticMatch.fullDescription,
+          startingPrice: staticMatch.startingPrice,
+          duration: staticMatch.duration,
+          image: staticMatch.image,
+          benefits: staticMatch.benefits,
+          afterCareTips: staticMatch.afterCareTips,
+          idealFor: staticMatch.idealFor,
+          processSteps: staticMatch.processSteps
+        });
+        const related = servicesData.filter((s) => staticMatch.relatedServices.includes(s.id));
+        setRelatedServicesList(related.map(s => ({
+          id: s.id,
+          title: s.title,
+          category: s.category,
+          shortDescription: s.shortDescription,
+          startingPrice: s.startingPrice,
+          duration: s.duration,
+          image: s.image
+        })));
+      }
+      setLoading(false);
+    };
+    loadService();
+  }, [serviceId]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[color:var(--cream)] text-[color:var(--charcoal)] flex flex-col justify-between">
+        <Navbar />
+        <main className="flex-1 flex flex-col items-center justify-center pt-32 pb-24">
+          <div className="animate-spin inline-block w-8 h-8 border-[3px] border-current border-t-transparent text-[color:var(--gold)] rounded-full mb-4"></div>
+          <p className="text-xs uppercase tracking-widest text-[color:var(--charcoal)]/50">Loading details...</p>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   // Elegant 404 state if service not found
   if (!service) {
@@ -62,16 +172,11 @@ function ServiceDetailPage() {
     );
   }
 
-  // Get related service objects
-  const relatedServicesList = servicesData.filter((s) =>
-    service.relatedServices.includes(s.id)
-  );
-
   // Create customized WhatsApp inquiry message link
   const encodedText = encodeURIComponent(
     `Hello Look's Hub! I am interested in inquiring about the "${service.title}" service.`
   );
-  const whatsAppInquiryUrl = `${salonWhatsApp || "https://wa.me/919926707048"}?text=${encodedText}`;
+  const whatsAppInquiryUrl = `${salonWhatsApp || "https://wa.me/919516350601"}?text=${encodedText}`;
 
   return (
     <div className="min-h-screen bg-[color:var(--cream)] text-[color:var(--charcoal)] overflow-x-hidden">
@@ -173,7 +278,7 @@ function ServiceDetailPage() {
                 Ideal For
               </span>
               <div className="flex flex-wrap gap-2">
-                {service.idealFor.map((item, idx) => (
+                {service.idealFor.map((item: string, idx: number) => (
                   <span
                     key={idx}
                     className="text-xs bg-[color:var(--charcoal)]/5 border border-[color:var(--charcoal)]/10 text-[color:var(--charcoal)]/80 px-4 py-2 rounded-full font-light"
@@ -198,7 +303,7 @@ function ServiceDetailPage() {
                   Key Benefits
                 </h3>
                 <ul className="space-y-4">
-                  {service.benefits.map((benefit, idx) => (
+                  {service.benefits.map((benefit: string, idx: number) => (
                     <li key={idx} className="flex items-start gap-3.5 text-sm md:text-base text-[color:var(--charcoal)]/85 font-light leading-relaxed">
                       <span className="w-5 h-5 rounded-full bg-[color:var(--gold)]/10 text-[color:var(--gold)] grid place-items-center shrink-0 mt-0.5">
                         <Check size={12} strokeWidth={3} />
@@ -215,7 +320,7 @@ function ServiceDetailPage() {
                   Aftercare Tips
                 </h3>
                 <ul className="space-y-4">
-                  {service.afterCareTips.map((tip, idx) => (
+                  {service.afterCareTips.map((tip: string, idx: number) => (
                     <li key={idx} className="flex items-start gap-3.5 text-sm md:text-base text-[color:var(--charcoal)]/85 font-light leading-relaxed border-l-2 border-[color:var(--gold)]/30 pl-4 py-1">
                       {tip}
                     </li>
@@ -235,7 +340,7 @@ function ServiceDetailPage() {
                 </h3>
 
                 <div className="relative border-l border-[color:var(--charcoal)]/10 pl-6 ml-3 space-y-10">
-                  {service.processSteps.map((step, idx) => (
+                  {service.processSteps.map((step: string, idx: number) => (
                     <div key={idx} className="relative">
                       {/* Step Indicator Dot */}
                       <span className="absolute -left-[37px] top-0.5 w-6 h-6 rounded-full bg-[color:var(--charcoal)] text-[color:var(--cream)] text-[10px] grid place-items-center font-bold border-4 border-[color:var(--cream)] shadow-sm">

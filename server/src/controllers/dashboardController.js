@@ -1,6 +1,7 @@
 import Booking from '../models/Booking.js'
 import Service from '../models/Service.js'
 import Testimonial from '../models/Testimonial.js'
+import Artist from '../models/Artist.js'
 import asyncHandler from '../utils/asyncHandler.js'
 import { sendSuccess } from '../utils/responseHandler.js'
 
@@ -16,6 +17,7 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
 
   const totalServices = await Service.countDocuments()
   const totalTestimonials = await Testimonial.countDocuments()
+  const totalArtists = await Artist.countDocuments()
 
   const recentBookings = await Booking.find({})
     .sort({ createdAt: -1 })
@@ -29,6 +31,7 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
     cancelledBookings,
     totalServices,
     totalTestimonials,
+    totalArtists,
     recentBookings
   }, 'Dashboard statistics retrieved successfully')
 })

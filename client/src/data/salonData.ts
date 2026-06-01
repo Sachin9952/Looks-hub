@@ -10,9 +10,9 @@ export const salonInfo = {
   description: "A welcoming sanctuary for all—where professional expertise meets genuine care. From classic cuts to advanced treatments, every guest receives personalized attention.",
   
   // Contact Information
-  phone: "+91 99267 07048",
-  phoneRaw: "09926707048",
-  whatsapp: "+91 99267 07048",
+  phone: "+91 95163 50601",
+  phoneRaw: "9516350601",
+  whatsapp: "+91 95163 50601",
   instagram: "https://instagram.com/lookshubsalon",
   
   // Location

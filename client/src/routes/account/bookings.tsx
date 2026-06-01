@@ -274,7 +274,7 @@ function BookingsDashboard() {
 
   const triggerWhatsApp = (booking: Booking) => {
     const text = `Hello Look's Hub Salon, I need support regarding my booking ID: ${booking._id}. Details: ${booking.service} on ${booking.date} at ${booking.time}.`;
-    const url = `https://wa.me/919926707048?text=${encodeURIComponent(text)}`;
+    const url = `https://wa.me/919516350601?text=${encodeURIComponent(text)}`;
     window.open(url, "_blank");
   };
 
@@ -483,7 +483,7 @@ function BookingsDashboard() {
                       whileInView={{ opacity: 1, y: 0 }}
                       viewport={{ once: true, margin: "-100px" }}
                       transition={{ duration: 0.55, delay: idx * 0.05 }}
-                      className="group bg-[color:var(--cream)] border border-[color:var(--charcoal)]/10 rounded-3xl p-6 md:p-8 flex flex-col md:flex-row gap-6 md:items-center justify-between hover:border-[color:var(--gold)]/30 hover:shadow-[var(--shadow-soft)] transition-all duration-500 relative overflow-hidden"
+                      className="group bg-[color:var(--cream)] border border-[color:var(--charcoal)]/10 rounded-3xl p-6 md:p-8 flex flex-col md:flex-row gap-6 md:items-center justify-between hover:border-[color:var(--gold)]/30 hover:shadow-[var(--shadow-soft)] transition-all duration-500 relative"
                     >
                       {/* Booking Card Details */}
                       <div className="flex gap-5 items-start">
@@ -573,7 +573,7 @@ function BookingsDashboard() {
                             <div className="relative">
                               <button
                                 onClick={() => setCalendarMenuOpen(calendarMenuOpen === booking._id ? null : booking._id)}
-                                className="p-2 bg-[color:var(--charcoal)]/5 text-[color:var(--charcoal)]/75 rounded-full hover:bg-[color:var(--charcoal)]/10 transition-all duration-300"
+                                className="p-2.5 bg-[color:var(--charcoal)]/5 text-[color:var(--charcoal)]/75 rounded-full hover:bg-[color:var(--charcoal)]/10 hover:text-[color:var(--charcoal)] transition-all duration-300 flex items-center justify-center"
                                 title="Add to Calendar"
                               >
                                 <CalendarPlus size={16} />
@@ -593,7 +593,7 @@ function BookingsDashboard() {
                                         href={getGoogleCalendarUrl(booking)}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="px-4 py-2 text-xs hover:bg-[color:var(--charcoal)]/5 flex items-center justify-between"
+                                        className="px-4 py-2 text-xs hover:bg-[color:var(--charcoal)]/5 flex items-center justify-between text-[color:var(--charcoal)]/85"
                                         onClick={() => setCalendarMenuOpen(null)}
                                       >
                                         Google Calendar
@@ -603,7 +603,7 @@ function BookingsDashboard() {
                                           downloadAppleCalendarIcs(booking);
                                           setCalendarMenuOpen(null);
                                         }}
-                                        className="w-full text-left px-4 py-2 text-xs hover:bg-[color:var(--charcoal)]/5 flex items-center justify-between"
+                                        className="w-full text-left px-4 py-2 text-xs hover:bg-[color:var(--charcoal)]/5 flex items-center justify-between text-[color:var(--charcoal)]/85"
                                       >
                                         Apple Calendar
                                       </button>
@@ -611,7 +611,7 @@ function BookingsDashboard() {
                                         href={getOutlookCalendarUrl(booking)}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="px-4 py-2 text-xs hover:bg-[color:var(--charcoal)]/5 flex items-center justify-between"
+                                        className="px-4 py-2 text-xs hover:bg-[color:var(--charcoal)]/5 flex items-center justify-between text-[color:var(--charcoal)]/85"
                                         onClick={() => setCalendarMenuOpen(null)}
                                       >
                                         Outlook Calendar

@@ -4,7 +4,6 @@ import { Footer } from "@/components/site/Footer";
 import { StickyActions } from "@/components/site/StickyActions";
 import { Hero } from "@/components/site/Hero";
 import { Services } from "@/components/site/Services";
-import { Gallery } from "@/components/site/Gallery";
 import { Artists } from "@/components/site/Artists";
 import { Pricing } from "@/components/site/Pricing";
 import { Testimonials } from "@/components/site/Testimonials";
@@ -31,7 +30,6 @@ function Index() {
       <main>
         <Hero />
         <Services />
-        <Gallery />
         <Artists />
         <Pricing />
         <Offer />

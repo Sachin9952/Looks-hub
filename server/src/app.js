@@ -1,6 +1,8 @@
 import express from 'express'
 import cors from 'cors'
 import dotenv from 'dotenv'
+import path from 'path'
+import { fileURLToPath } from 'url'
 
 // Import routes
 import authRoutes from './routes/authRoutes.js'
@@ -9,11 +11,16 @@ import serviceRoutes from './routes/serviceRoutes.js'
 import galleryRoutes from './routes/galleryRoutes.js'
 import testimonialRoutes from './routes/testimonialRoutes.js'
 import dashboardRoutes from './routes/dashboardRoutes.js'
+import uploadRoutes from './routes/uploadRoutes.js'
+import artistRoutes from './routes/artistRoutes.js'
 
 // Import error middleware
 import { errorHandler } from './middleware/errorMiddleware.js'
 
 dotenv.config()
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 const app = express()
 
@@ -52,6 +59,11 @@ app.use('/api/services', serviceRoutes)
 app.use('/api/gallery', galleryRoutes)
 app.use('/api/testimonials', testimonialRoutes)
 app.use('/api/dashboard', dashboardRoutes)
+app.use('/api/upload', uploadRoutes)
+app.use('/api/artists', artistRoutes)
+
+// Serve uploads static folder
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')))
 
 // Base Welcome Route
 app.get('/', (req, res) => {

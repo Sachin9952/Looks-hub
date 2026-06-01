@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, ArrowRight, Check, CalendarDays, Clock, User } from "lucide-react";
@@ -6,6 +6,8 @@ import { Navbar } from "@/components/site/Navbar";
 import { Footer } from "@/components/site/Footer";
 import { services, artists } from "@/lib/data";
 import { z } from "zod";
+import { getServiceImage } from "@/components/site/Services";
+import { getImageUrl } from "@/lib/utils";
 
 const bookSearchSchema = z.object({
   service: z.string().optional(),
@@ -30,6 +32,8 @@ function BookPage() {
   const [step, setStep] = useState(0);
   const [done, setDone] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [dbServices, setDbServices] = useState<any[]>([]);
+  const [dbArtists, setDbArtists] = useState<any[]>([]);
   const [data, setData] = useState({
     serviceId: service || "",
     artistId: "",
@@ -39,6 +43,73 @@ function BookPage() {
     phone: "",
     notes: "",
   });
+
+  useEffect(() => {
+    const fetchServices = async () => {
+      try {
+        const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+        const res = await fetch(`${apiUrl}/services`);
+        if (res.ok) {
+          const resData = await res.json();
+          if (resData.success && resData.data && resData.data.length > 0) {
+            const mapped = resData.data.filter((s: any) => s.isActive).map((s: any) => {
+              const staticMatch = services.find(
+                (sd) => sd.name.toLowerCase() === s.name.toLowerCase()
+              );
+              return {
+                id: staticMatch?.id || s._id,
+                name: s.name,
+                category: s.category,
+                desc: s.description || staticMatch?.desc || s.name,
+                price: s.price,
+                duration: s.duration,
+                image: getServiceImage(s.name)
+              };
+            });
+            setDbServices(mapped);
+            // If dynamic load finished and url query match found, auto select it
+            if (service) {
+              const match = mapped.find((m: any) => m.id === service);
+              if (match) {
+                setData(d => ({ ...d, serviceId: match.id }));
+              }
+            }
+            return;
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load services for booking:", err);
+      }
+      setDbServices(services);
+    };
+    fetchServices();
+  }, [service]);
+
+  useEffect(() => {
+    const fetchArtists = async () => {
+      try {
+        const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+        const res = await fetch(`${apiUrl}/artists`);
+        if (res.ok) {
+          const resData = await res.json();
+          if (resData.success && resData.data && resData.data.length > 0) {
+            const mapped = resData.data.map((a: any) => ({
+              id: a._id,
+              name: a.name,
+              specialty: a.specialty,
+              image: a.image,
+            }));
+            setDbArtists(mapped);
+            return;
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load artists for booking:", err);
+      }
+      setDbArtists(artists);
+    };
+    fetchArtists();
+  }, []);
 
   const next = () => setStep((s) => Math.min(s + 1, steps.length - 1));
   const prev = () => setStep((s) => Math.max(s - 1, 0));
@@ -52,8 +123,8 @@ function BookPage() {
   const handleSubmit = async () => {
     setLoading(true);
     try {
-      const selectedService = services.find((s) => s.id === data.serviceId)?.name || data.serviceId;
-      const selectedStylist = artists.find((a) => a.id === data.artistId)?.name || data.artistId;
+      const selectedService = dbServices.find((s) => s.id === data.serviceId)?.name || data.serviceId;
+      const selectedStylist = dbArtists.find((a) => a.id === data.artistId)?.name || data.artistId;
 
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
       const response = await fetch(`${apiUrl}/bookings`, {
@@ -95,7 +166,7 @@ function BookPage() {
     }
   };
 
-  if (done) return <Confirmation data={data} />;
+  if (done) return <Confirmation data={data} services={dbServices} artists={dbArtists} />;
 
   return (
     <div className="min-h-screen bg-secondary/30">
@@ -129,7 +200,7 @@ function BookPage() {
               >
                 {step === 0 && (
                   <div className="grid gap-4 sm:grid-cols-2">
-                    {services.map((s) => {
+                    {dbServices.map((s) => {
                       const active = data.serviceId === s.id;
                       return (
                         <button
@@ -150,21 +221,21 @@ function BookPage() {
                 )}
 
                 {step === 1 && (
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                    {artists.map((a) => {
+                  <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+                    {dbArtists.map((a) => {
                       const active = data.artistId === a.id;
                       return (
                         <button
                           key={a.id}
                           onClick={() => setData({ ...data, artistId: a.id })}
-                          className={`text-left rounded-2xl overflow-hidden border transition-all ${active ? "border-[color:var(--gold)] shadow-[var(--shadow-soft)]" : "border-border hover:border-foreground/30"}`}
+                          className={`text-left rounded-2xl overflow-hidden border transition-all ${active ? "border-[color:var(--gold)] shadow-[var(--shadow-soft)] bg-[color:var(--gold-soft)]/10" : "border-border hover:border-foreground/30"}`}
                         >
-                          <div className="aspect-[4/5] overflow-hidden">
-                            <img src={a.image} alt={a.name} className="w-full h-full object-cover" />
+                          <div className="aspect-square overflow-hidden bg-secondary">
+                            <img src={getImageUrl(a.image)} alt={a.name} className="w-full h-full object-cover" />
                           </div>
-                          <div className="p-4">
-                            <p className="font-display text-lg">{a.name}</p>
-                            <p className="text-xs text-muted-foreground">{a.specialty}</p>
+                          <div className="p-3 sm:p-4">
+                            <p className="font-display text-sm sm:text-base md:text-lg leading-snug">{a.name}</p>
+                            <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 truncate">{a.specialty}</p>
                           </div>
                         </button>
                       );
@@ -260,7 +331,7 @@ function Field({ label, icon, children }: { label: string; icon?: React.ReactNod
   );
 }
 
-function Confirmation({ data }: { data: { serviceId: string; artistId: string; date: string; time: string; name: string } }) {
+function Confirmation({ data, services, artists }: { data: { serviceId: string; artistId: string; date: string; time: string; name: string }; services: any[]; artists: any[] }) {
   const service = services.find((s) => s.id === data.serviceId);
   const artist = artists.find((a) => a.id === data.artistId);
   return (

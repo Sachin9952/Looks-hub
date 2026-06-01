@@ -1,15 +1,83 @@
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Link } from "@tanstack/react-router";
 import { ArrowRight } from "lucide-react";
 import { servicesData } from "@/data/servicesData";
 
+import hair from "@/assets/service-hair.jpg";
+import spa from "@/assets/service-spa.jpg";
+import color from "@/assets/service-color.jpg";
+import bridal from "@/assets/service-bridal.jpg";
+import facial from "@/assets/service-spa.jpg";
+import grooming from "@/assets/service-grooming.jpg";
+import nails from "@/assets/service-nails.jpg";
+
+export const getServiceImage = (serviceName: string) => {
+  const name = serviceName.toLowerCase();
+  if (name.includes("haircut") || name.includes("cutting") || name.includes("hair artistry")) return hair;
+  if (name.includes("spa")) return spa;
+  if (name.includes("color")) return color;
+  if (name.includes("bridal") || name.includes("makeup")) return bridal;
+  if (name.includes("facial") || name.includes("skin")) return facial;
+  if (name.includes("shaving") || name.includes("beard")) return nails;
+  if (name.includes("grooming")) return grooming;
+  return hair;
+};
+
 export function Services() {
-  // Show only 3 featured services: Haircut, Spa, Color
-  const featuredServices = [
-    servicesData.find((s) => s.id === "haircut"),
-    servicesData.find((s) => s.id === "spa"),
-    servicesData.find((s) => s.id === "color"),
-  ].filter(Boolean) as typeof servicesData;
+  const [featuredServices, setFeaturedServices] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchServices = async () => {
+      try {
+        const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+        const res = await fetch(`${apiUrl}/services`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.data && data.data.length > 0) {
+            const allServices = data.data.filter((s: any) => s.isActive);
+            const haircut = allServices.find((s: any) => s.name.toLowerCase().includes("haircut"));
+            const spaItem = allServices.find((s: any) => s.name.toLowerCase().includes("spa"));
+            const colorItem = allServices.find((s: any) => s.name.toLowerCase().includes("color"));
+            
+            const selected = [
+              haircut || allServices[0],
+              spaItem || allServices[1],
+              colorItem || allServices[2]
+            ].filter(Boolean);
+
+            const mapped = selected.map((s: any) => {
+              // Find matching details from static data by name
+              const staticMatch = servicesData.find(
+                (sd) => sd.title.toLowerCase() === s.name.toLowerCase()
+              );
+              return {
+                id: staticMatch?.id || s._id,
+                title: s.name,
+                category: s.category,
+                shortDescription: s.description || staticMatch?.shortDescription || s.name,
+                startingPrice: s.price,
+                duration: s.duration,
+                image: getServiceImage(s.name)
+              };
+            });
+            setFeaturedServices(mapped);
+            return;
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load services from API:", err);
+      }
+      
+      // Fallback
+      setFeaturedServices([
+        { ...servicesData[0], title: servicesData[0].title, shortDescription: servicesData[0].shortDescription, startingPrice: servicesData[0].startingPrice },
+        { ...servicesData[1], title: servicesData[1].title, shortDescription: servicesData[1].shortDescription, startingPrice: servicesData[1].startingPrice },
+        { ...servicesData[2], title: servicesData[2].title, shortDescription: servicesData[2].shortDescription, startingPrice: servicesData[2].startingPrice }
+      ]);
+    };
+    fetchServices();
+  }, []);
 
   const serviceLabels = [
     "Signature Hair Artistry",
@@ -18,7 +86,7 @@ export function Services() {
   ];
 
   return (
-    <section id="services" className="relative py-20 md:py-32 bg-[color:var(--cream)] text-[color:var(--charcoal)]">
+    <section id="services" className="relative pt-20 pb-4 md:pt-32 md:pb-8 bg-[color:var(--cream)] text-[color:var(--charcoal)]">
       {/* Subtle luxury texture */}
       <div className="absolute inset-0 opacity-5">
         <div className="absolute inset-0" style={{
@@ -186,7 +254,7 @@ export function Services() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.8, delay: 0.2 }}
-          className="mt-32 pt-20 border-t border-[color:var(--charcoal)]/10 text-center"
+          className="mt-16 pt-10 border-t border-[color:var(--charcoal)]/10 text-center"
         >
           <p className="text-sm text-[color:var(--charcoal)]/60 mb-6">Experience our complete collection</p>
           <Link
