@@ -29,9 +29,12 @@ Thumbs.db
 .env.example.local
 
 # Uploads
-uploads/
+/uploads/
 server/uploads/*
 !server/uploads/.gitkeep
+!server/uploads/artist-*.jpg
+!server/uploads/artist-*.png
+!server/uploads/artist-*.jpeg
 
 # Testing
 coverage/
