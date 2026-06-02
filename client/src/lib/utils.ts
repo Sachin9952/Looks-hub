@@ -20,3 +20,16 @@ export function getImageUrl(url: string) {
   const baseUrl = apiUrl.endsWith("/api") ? apiUrl.slice(0, -4) : apiUrl;
   return `${baseUrl}${url}`;
 }
+
+export function getOptimizedCloudinaryUrl(url: string, width = 400, height = 500) {
+  if (!url) return "";
+  if (!url.includes("res.cloudinary.com")) return getImageUrl(url);
+  
+  const uploadSegment = "/image/upload";
+  if (url.includes(uploadSegment)) {
+    const parts = url.split(uploadSegment);
+    return `${parts[0]}${uploadSegment}/f_auto,q_auto,c_fill,w_${width},h_${height}${parts[1]}`;
+  }
+  return url;
+}
+

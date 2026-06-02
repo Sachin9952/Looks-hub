@@ -13,9 +13,11 @@ import testimonialRoutes from './routes/testimonialRoutes.js'
 import dashboardRoutes from './routes/dashboardRoutes.js'
 import uploadRoutes from './routes/uploadRoutes.js'
 import artistRoutes from './routes/artistRoutes.js'
+import barberRoutes from './routes/barberRoutes.js'
 
 // Import error middleware
 import { errorHandler } from './middleware/errorMiddleware.js'
+
 
 dotenv.config()
 
@@ -61,6 +63,7 @@ app.use('/api/testimonials', testimonialRoutes)
 app.use('/api/dashboard', dashboardRoutes)
 app.use('/api/upload', uploadRoutes)
 app.use('/api/artists', artistRoutes)
+app.use('/api/barbers', barberRoutes)
 
 // Serve uploads static folder
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')))

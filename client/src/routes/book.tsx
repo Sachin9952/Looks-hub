@@ -7,7 +7,8 @@ import { Footer } from "@/components/site/Footer";
 import { services, artists } from "@/lib/data";
 import { z } from "zod";
 import { getServiceImage } from "@/components/site/Services";
-import { getImageUrl } from "@/lib/utils";
+import { getImageUrl, getOptimizedCloudinaryUrl } from "@/lib/utils";
+import { ImageWithFallback } from "@/components/ui/ImageWithFallback";
 
 const bookSearchSchema = z.object({
   service: z.string().optional(),
@@ -97,7 +98,7 @@ function BookPage() {
               id: a._id,
               name: a.name,
               specialty: a.specialty,
-              image: a.image,
+              image: a.imageUrl || a.image,
             }));
             setDbArtists(mapped);
             return;
@@ -231,7 +232,11 @@ function BookPage() {
                           className={`text-left rounded-2xl overflow-hidden border transition-all ${active ? "border-[color:var(--gold)] shadow-[var(--shadow-soft)] bg-[color:var(--gold-soft)]/10" : "border-border hover:border-foreground/30"}`}
                         >
                           <div className="aspect-square overflow-hidden bg-secondary">
-                            <img src={getImageUrl(a.image)} alt={a.name} className="w-full h-full object-cover" />
+                            <ImageWithFallback 
+                              src={getOptimizedCloudinaryUrl(a.image, 300, 300)} 
+                              alt={a.name} 
+                              className="w-full h-full object-cover transition-transform duration-500 hover:scale-105" 
+                            />
                           </div>
                           <div className="p-3 sm:p-4">
                             <p className="font-display text-sm sm:text-base md:text-lg leading-snug">{a.name}</p>
@@ -285,7 +290,13 @@ function BookPage() {
                       <input value={data.name} onChange={(e) => setData({ ...data, name: e.target.value })} placeholder="e.g. Priya Kapoor" className="input-luxe" />
                     </Field>
                     <Field label="Phone">
-                      <input value={data.phone} onChange={(e) => setData({ ...data, phone: e.target.value })} placeholder="+91 ..." className="input-luxe" />
+                      <input 
+                        type="tel" 
+                        value={data.phone} 
+                        onChange={(e) => setData({ ...data, phone: e.target.value.replace(/(?!^\+)[^\d]/g, "") })} 
+                        placeholder="+91 ..." 
+                        className="input-luxe" 
+                      />
                     </Field>
                     <Field label="Notes (optional)">
                       <textarea value={data.notes} onChange={(e) => setData({ ...data, notes: e.target.value })} rows={4} placeholder="Anything we should know — allergies, references, occasion..." className="input-luxe resize-none" />

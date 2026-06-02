@@ -2,7 +2,8 @@ import { motion, useReducedMotion } from "framer-motion";
 import { Instagram, Star, ArrowLeft, ArrowRight } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { artists as defaultArtists } from "@/lib/data";
-import { getImageUrl } from "@/lib/utils";
+import { getOptimizedCloudinaryUrl } from "@/lib/utils";
+import { ImageWithFallback } from "@/components/ui/ImageWithFallback";
 
 export function Artists() {
   const shouldReduceMotion = useReducedMotion();
@@ -97,15 +98,10 @@ export function Artists() {
                   transition={{ duration: 0.3, ease: "easeOut" }}
                   className="relative aspect-[4/5] overflow-hidden rounded-[1.5rem] bg-secondary"
                 >
-                  <motion.img 
-                    src={getImageUrl(a.image)} 
-                    alt={a.name} 
-                    loading="lazy" 
-                    variants={{
-                      hover: { scale: shouldReduceMotion ? 1 : 1.05 }
-                    }}
-                    transition={{ duration: 0.5, ease: "easeOut" }}
-                    className="w-full h-full object-cover" 
+                  <ImageWithFallback 
+                    src={getOptimizedCloudinaryUrl(a.imageUrl || a.image, 400, 500)} 
+                    alt={a.name}
+                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                   />
                   <a href="#" className="absolute top-4 right-4 w-9 h-9 rounded-full grid place-items-center bg-background/85 backdrop-blur hover:bg-[color:var(--gold)] transition-colors">
                     <Instagram size={15} />

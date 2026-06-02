@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { getImageUrl } from "@/lib/utils";
+import { toast, Toaster } from "sonner";
 import {
   Calendar,
   Clock,
@@ -25,6 +26,7 @@ import {
   Eye,
   Star,
   ChevronDown,
+  Pencil,
 } from "lucide-react";
 
 export const Route = createFileRoute("/admin/dashboard")({
@@ -81,6 +83,8 @@ interface ArtistItem {
   years: number;
   rating: number;
   image: string;
+  imageUrl?: string;
+  imagePublicId?: string;
 }
 
 interface Stats {
@@ -93,6 +97,53 @@ interface Stats {
   totalTestimonials: number;
   totalArtists?: number;
 }
+
+const uploadFileWithProgress = (file: File, token: string, onProgress: (progress: number) => void): Promise<{ imageUrl: string, imagePublicId: string }> => {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const formData = new FormData();
+    formData.append("image", file);
+
+    const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+    xhr.open("POST", `${apiUrl}/barbers/upload`);
+    xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+
+    xhr.upload.addEventListener("progress", (event) => {
+      if (event.lengthComputable) {
+        const percentCompleted = Math.round((event.loaded * 100) / event.total);
+        onProgress(percentCompleted);
+      }
+    });
+
+    xhr.addEventListener("load", () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const response = JSON.parse(xhr.responseText);
+          if (response.success) {
+            resolve({ imageUrl: response.imageUrl, imagePublicId: response.imagePublicId });
+          } else {
+            reject(new Error(response.message || "Upload failed"));
+          }
+        } catch (e) {
+          reject(new Error("Invalid response from server"));
+        }
+      } else {
+        try {
+          const response = JSON.parse(xhr.responseText);
+          reject(new Error(response.message || `Server error: ${xhr.status}`));
+        } catch {
+          reject(new Error(`Server error: ${xhr.status}`));
+        }
+      }
+    });
+
+    xhr.addEventListener("error", () => {
+      reject(new Error("Network error during upload"));
+    });
+
+    xhr.send(formData);
+  });
+};
 
 function AdminDashboardPage() {
   const [activeTab, setActiveTab] = useState<"overview" | "bookings" | "services" | "gallery" | "testimonials" | "offers" | "artists">("overview");
@@ -117,6 +168,10 @@ function AdminDashboardPage() {
   const [newArtist, setNewArtist] = useState({
     name: "", specialty: "", years: 1, rating: 5
   });
+  const [editingArtist, setEditingArtist] = useState<ArtistItem | null>(null);
+  const [artistUploadProgress, setArtistUploadProgress] = useState(0);
+  const [isUploadingArtist, setIsUploadingArtist] = useState(false);
+  const [artistPreviewUrl, setArtistPreviewUrl] = useState("");
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -403,57 +458,85 @@ function AdminDashboardPage() {
   };
 
   // Artist Actions
-  const handleCreateArtist = async (e: React.FormEvent) => {
+  const handleArtistFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files ? e.target.files[0] : null;
+    setArtistFile(file);
+    if (file) {
+      setArtistPreviewUrl(URL.createObjectURL(file));
+    } else {
+      setArtistPreviewUrl("");
+    }
+  };
+
+  const handleSaveArtist = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsUploadingArtist(true);
+    setArtistUploadProgress(0);
+
     try {
       const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
-      let uploadedImageUrl = "";
+      const token = localStorage.getItem("adminToken");
+
+      let finalImageUrl = "";
+      let finalImagePublicId = "";
 
       if (artistFile) {
-        const formData = new FormData();
-        formData.append("image", artistFile);
-
-        const token = localStorage.getItem("adminToken");
-        const uploadRes = await fetch(`${apiUrl}/upload`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          body: formData,
+        const uploadResult = await uploadFileWithProgress(artistFile, token || "", (prog) => {
+          setArtistUploadProgress(prog);
         });
-
-        if (!uploadRes.ok) {
-          const errorData = await uploadRes.json();
-          alert(errorData.message || "Failed to upload artist photo");
-          return;
-        }
-
-        const uploadData = await uploadRes.json();
-        uploadedImageUrl = uploadData.url;
+        finalImageUrl = uploadResult.imageUrl;
+        finalImagePublicId = uploadResult.imagePublicId;
+      } else if (editingArtist) {
+        finalImageUrl = editingArtist.imageUrl || editingArtist.image;
+        finalImagePublicId = editingArtist.imagePublicId || "";
       } else {
-        alert("Please select a profile photo for the artist");
+        toast.error("Please select a profile photo for the artist");
+        setIsUploadingArtist(false);
         return;
       }
 
-      const res = await fetch(`${apiUrl}/artists`, {
-        method: "POST",
-        headers: getHeaders(),
-        body: JSON.stringify({
-          ...newArtist,
-          image: uploadedImageUrl,
-        }),
-      });
+      const payload = {
+        name: newArtist.name,
+        specialty: newArtist.specialty,
+        years: Number(newArtist.years),
+        rating: Number(newArtist.rating) || 5.0,
+        imageUrl: finalImageUrl,
+        imagePublicId: finalImagePublicId
+      };
+
+      let res;
+      if (editingArtist) {
+        res = await fetch(`${apiUrl}/artists/${editingArtist._id}`, {
+          method: "PUT",
+          headers: getHeaders(),
+          body: JSON.stringify(payload),
+        });
+      } else {
+        res = await fetch(`${apiUrl}/artists`, {
+          method: "POST",
+          headers: getHeaders(),
+          body: JSON.stringify(payload),
+        });
+      }
+
       if (res.ok) {
+        toast.success(editingArtist ? "Team member updated successfully" : "Team member added successfully");
         setShowArtistForm(false);
+        setEditingArtist(null);
         setNewArtist({ name: "", specialty: "", years: 1, rating: 5 });
         setArtistFile(null);
+        setArtistPreviewUrl("");
+        setArtistUploadProgress(0);
         fetchDashboardData();
       } else {
         const errJson = await res.json();
-        alert(errJson.message || "Failed to add artist");
+        toast.error(errJson.message || "Failed to save team member details");
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      toast.error(err.message || "An error occurred while saving the team member");
+    } finally {
+      setIsUploadingArtist(false);
     }
   };
 
@@ -462,10 +545,14 @@ function AdminDashboardPage() {
     try {
       const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
       const res = await fetch(`${apiUrl}/artists/${id}`, { method: "DELETE", headers: getHeaders() });
-      if (res.ok) fetchDashboardData();
-      else alert("Failed to remove artist");
+      if (res.ok) {
+        toast.success("Team member removed successfully");
+        fetchDashboardData();
+      }
+      else toast.error("Failed to remove artist");
     } catch (err) {
       console.error(err);
+      toast.error("An error occurred while removing the team member");
     }
   };
 
@@ -476,6 +563,7 @@ function AdminDashboardPage() {
 
   return (
     <div className="min-h-screen bg-[color:var(--charcoal)] text-[color:var(--cream)] flex">
+      <Toaster position="top-right" richColors />
       {/* Sidebar Layout */}
       <aside className="w-64 bg-black/40 border-r border-white/10 flex flex-col justify-between hidden md:flex">
         <div>
@@ -1030,36 +1118,83 @@ function AdminDashboardPage() {
                 <div className="space-y-6">
                   <div className="flex justify-between items-center">
                     <h3 className="font-display text-2xl text-white">Salon Team / Barbers</h3>
-                    <button onClick={() => setShowArtistForm(!showArtistForm)} className="btn-gold flex items-center gap-1.5 text-xs py-2 px-4">
+                    <button 
+                      onClick={() => {
+                        setShowArtistForm(!showArtistForm);
+                        if (showArtistForm || editingArtist) {
+                          setEditingArtist(null);
+                          setNewArtist({ name: "", specialty: "", years: 1, rating: 5 });
+                          setArtistFile(null);
+                          setArtistPreviewUrl("");
+                          setArtistUploadProgress(0);
+                        }
+                      }} 
+                      className="btn-gold flex items-center gap-1.5 text-xs py-2 px-4"
+                    >
                       <Plus size={14} /> {showArtistForm ? "Cancel" : "Add Team Member"}
                     </button>
                   </div>
 
                   {showArtistForm && (
-                    <form onSubmit={handleCreateArtist} className="bg-black/20 border border-white/10 rounded-3xl p-6 max-w-2xl space-y-4">
+                    <form onSubmit={handleSaveArtist} className="bg-black/20 border border-white/10 rounded-3xl p-6 max-w-2xl space-y-4">
+                      <h4 className="font-display text-lg text-[color:var(--gold)]">
+                        {editingArtist ? `Edit Barber: ${editingArtist.name}` : "Add New Barber"}
+                      </h4>
                       <div className="grid sm:grid-cols-2 gap-4">
                         <div>
                           <label className="text-xs uppercase tracking-wider text-white/50">Full Name</label>
-                          <input required value={newArtist.name} onChange={(e) => setNewArtist({...newArtist, name: e.target.value})} placeholder="e.g. Robin Singh" className="mt-2 w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white" />
+                          <input required disabled={isUploadingArtist} value={newArtist.name} onChange={(e) => setNewArtist({...newArtist, name: e.target.value})} placeholder="e.g. Robin Singh" className="mt-2 w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white" />
                         </div>
                         <div>
                           <label className="text-xs uppercase tracking-wider text-white/50">Specialty</label>
-                          <input required value={newArtist.specialty} onChange={(e) => setNewArtist({...newArtist, specialty: e.target.value})} placeholder="e.g. Master Stylist & Colorist" className="mt-2 w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white" />
+                          <input required disabled={isUploadingArtist} value={newArtist.specialty} onChange={(e) => setNewArtist({...newArtist, specialty: e.target.value})} placeholder="e.g. Master Stylist & Colorist" className="mt-2 w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white" />
                         </div>
                         <div>
                           <label className="text-xs uppercase tracking-wider text-white/50">Experience (Years)</label>
-                          <input required type="number" min="0" value={newArtist.years} onChange={(e) => setNewArtist({...newArtist, years: parseInt(e.target.value) || 0})} className="mt-2 w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white" />
+                          <input required disabled={isUploadingArtist} type="number" min="0" value={newArtist.years} onChange={(e) => setNewArtist({...newArtist, years: parseInt(e.target.value) || 0})} className="mt-2 w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white" />
                         </div>
                         <div>
                           <label className="text-xs uppercase tracking-wider text-white/50">Rating (1.0 - 5.0)</label>
-                          <input required type="number" step="0.1" min="1" max="5" value={newArtist.rating} onChange={(e) => setNewArtist({...newArtist, rating: parseFloat(e.target.value) || 5.0})} className="mt-2 w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white" />
+                          <input required disabled={isUploadingArtist} type="number" step="0.1" min="1" max="5" value={newArtist.rating} onChange={(e) => setNewArtist({...newArtist, rating: parseFloat(e.target.value) || 5.0})} className="mt-2 w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white" />
                         </div>
                       </div>
                       <div>
                         <label className="text-xs uppercase tracking-wider text-white/50">Profile Picture</label>
-                        <input required type="file" accept="image/*" onChange={(e) => setArtistFile(e.target.files ? e.target.files[0] : null)} className="mt-2 w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-[color:var(--cream)]" />
+                        <input required={!editingArtist} disabled={isUploadingArtist} type="file" accept="image/*" onChange={handleArtistFileChange} className="mt-2 w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-[color:var(--cream)]" />
+                        
+                        {/* Image Preview Area */}
+                        {(artistPreviewUrl || (editingArtist && (editingArtist.imageUrl || editingArtist.image))) && (
+                          <div className="mt-4 relative w-32 h-40 rounded-xl overflow-hidden border border-white/15 group">
+                            <img src={artistPreviewUrl || getImageUrl(editingArtist?.imageUrl || editingArtist?.image || "")} className="w-full h-full object-cover" alt="Preview" />
+                            {artistFile && !isUploadingArtist && (
+                              <button 
+                                type="button" 
+                                onClick={() => { setArtistFile(null); setArtistPreviewUrl(""); }} 
+                                className="absolute top-2 right-2 p-1.5 bg-red-500 hover:bg-red-600 rounded-full text-white transition-colors"
+                              >
+                                <XCircle size={14} />
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </div>
-                      <button type="submit" className="btn-gold text-xs py-2.5 px-6">Save Team Member</button>
+
+                      {/* Real Progress Bar */}
+                      {isUploadingArtist && artistUploadProgress > 0 && (
+                        <div className="space-y-1.5 pt-2">
+                          <div className="flex justify-between text-xs text-white/50">
+                            <span>Uploading image to Cloudinary...</span>
+                            <span>{artistUploadProgress}%</span>
+                          </div>
+                          <div className="w-full bg-white/5 rounded-full h-2 overflow-hidden">
+                            <div className="bg-[color:var(--gold)] h-full rounded-full transition-all duration-300" style={{ width: `${artistUploadProgress}%` }} />
+                          </div>
+                        </div>
+                      )}
+
+                      <button type="submit" disabled={isUploadingArtist} className="btn-gold text-xs py-2.5 px-6 disabled:opacity-50 disabled:cursor-not-allowed">
+                        {isUploadingArtist ? `Saving (${artistUploadProgress}%)` : editingArtist ? "Update Team Member" : "Save Team Member"}
+                      </button>
                     </form>
                   )}
 
@@ -1073,7 +1208,7 @@ function AdminDashboardPage() {
                         <div key={a._id} className="bg-black/20 border border-white/10 rounded-3xl overflow-hidden shadow-[var(--shadow-soft)] flex flex-col justify-between">
                           <div>
                             <div className="aspect-[4/5] relative w-full overflow-hidden">
-                              <img src={getImageUrl(a.image)} alt={a.name} className="absolute inset-0 w-full h-full object-cover" />
+                              <img src={getImageUrl(a.imageUrl || a.image)} alt={a.name} className="absolute inset-0 w-full h-full object-cover" />
                             </div>
                             <div className="p-5">
                               <p className="font-display text-lg text-white">{a.name}</p>
@@ -1086,9 +1221,28 @@ function AdminDashboardPage() {
                               </div>
                             </div>
                           </div>
-                          <div className="p-5 pt-0 border-t border-white/5 mt-4 flex justify-end">
-                            <button onClick={() => handleDeleteArtist(a._id)} className="p-2 rounded-lg bg-red-500/10 hover:bg-red-500/25 text-red-400 transition-all flex items-center gap-1.5 text-xs font-semibold">
-                              <Trash2 size={14} /> Remove
+                          <div className="p-5 pt-0 border-t border-white/5 mt-4 grid grid-cols-2 gap-2">
+                            <button 
+                              onClick={() => {
+                                setEditingArtist(a);
+                                setNewArtist({
+                                  name: a.name,
+                                  specialty: a.specialty,
+                                  years: a.years,
+                                  rating: a.rating
+                                });
+                                setArtistPreviewUrl(a.imageUrl || a.image);
+                                setShowArtistForm(true);
+                              }}
+                              className="w-full py-2 px-3 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 hover:text-white transition-all flex items-center justify-center gap-1.5 text-xs font-semibold"
+                            >
+                              <Pencil size={13} /> Edit
+                            </button>
+                            <button 
+                              onClick={() => handleDeleteArtist(a._id)} 
+                              className="w-full py-2 px-3 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-white transition-all flex items-center justify-center gap-1.5 text-xs font-semibold"
+                            >
+                              <Trash2 size={13} /> Remove
                             </button>
                           </div>
                         </div>

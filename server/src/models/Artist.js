@@ -19,7 +19,12 @@ const artistSchema = new mongoose.Schema({
     type: Number,
     default: 5.0
   },
-  image: {
+  imageUrl: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  imagePublicId: {
     type: String,
     required: true,
     trim: true
