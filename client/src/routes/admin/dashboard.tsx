@@ -105,7 +105,7 @@ const uploadFileWithProgress = (file: File, token: string, onProgress: (progress
     formData.append("image", file);
 
     const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
-    xhr.open("POST", `${apiUrl}/barbers/upload`);
+    xhr.open("POST", `${apiUrl}/upload`);
     xhr.setRequestHeader("Authorization", `Bearer ${token}`);
 
     xhr.upload.addEventListener("progress", (event) => {
