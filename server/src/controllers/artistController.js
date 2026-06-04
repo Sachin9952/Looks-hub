@@ -54,7 +54,7 @@ export const getArtists = asyncHandler(async (req, res) => {
 // @route   POST /api/artists
 // @access  Private (Admin)
 export const createArtist = asyncHandler(async (req, res) => {
-  const { name, specialty, years, rating, imageUrl, imagePublicId } = req.body
+  const { name, specialty, years, rating, imageUrl, imagePublicId, workingHours } = req.body
 
   const artist = await Artist.create({
     name,
@@ -62,7 +62,8 @@ export const createArtist = asyncHandler(async (req, res) => {
     years: Number(years),
     rating: Number(rating) || 5.0,
     imageUrl,
-    imagePublicId
+    imagePublicId,
+    workingHours: workingHours || { start: "09:00", end: "18:00" }
   })
 
   sendSuccess(res, artist, 'Artist created successfully', 201)
@@ -72,7 +73,7 @@ export const createArtist = asyncHandler(async (req, res) => {
 // @route   PUT /api/artists/:id
 // @access  Private (Admin)
 export const updateArtist = asyncHandler(async (req, res) => {
-  const { name, specialty, years, rating, imageUrl, imagePublicId } = req.body
+  const { name, specialty, years, rating, imageUrl, imagePublicId, workingHours } = req.body
   const artist = await Artist.findById(req.params.id)
 
   if (!artist) {
@@ -97,6 +98,7 @@ export const updateArtist = asyncHandler(async (req, res) => {
   artist.rating = rating !== undefined ? Number(rating) : artist.rating
   if (imageUrl) artist.imageUrl = imageUrl
   if (imagePublicId) artist.imagePublicId = imagePublicId
+  if (workingHours) artist.workingHours = workingHours
 
   const updatedArtist = await artist.save()
   sendSuccess(res, updatedArtist, 'Artist updated successfully')

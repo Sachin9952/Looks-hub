@@ -15,17 +15,23 @@ export const getServices = asyncHandler(async (req, res) => {
   sendSuccess(res, services, 'Services retrieved successfully')
 })
 
-// @desc    Create new service
-// @route   POST /api/services
-// @access  Private (Admin)
 export const createService = asyncHandler(async (req, res) => {
-  const { name, category, price, duration, description, isPopular, isActive } = req.body
+  const { name, category, price, duration, description, isPopular, isActive, durationMinutes } = req.body
+
+  let finalDurationMinutes = durationMinutes
+  if (!finalDurationMinutes && duration) {
+    const match = duration.match(/(\d+)/)
+    if (match) {
+      finalDurationMinutes = parseInt(match[1], 10)
+    }
+  }
 
   const service = await Service.create({
     name,
     category,
     price,
     duration,
+    durationMinutes: finalDurationMinutes || 60,
     description,
     isPopular,
     isActive
@@ -37,8 +43,9 @@ export const createService = asyncHandler(async (req, res) => {
 // @desc    Update service details
 // @route   PUT /api/services/:id
 // @access  Private (Admin)
+// export const updateService = asyncHandler(async (req, res) => {
 export const updateService = asyncHandler(async (req, res) => {
-  const { name, category, price, duration, description, isPopular, isActive } = req.body
+  const { name, category, price, duration, description, isPopular, isActive, durationMinutes } = req.body
 
   const service = await Service.findById(req.params.id)
 
@@ -50,6 +57,14 @@ export const updateService = asyncHandler(async (req, res) => {
   service.category = category !== undefined ? category : service.category
   service.price = price !== undefined ? price : service.price
   service.duration = duration !== undefined ? duration : service.duration
+  if (durationMinutes !== undefined) {
+    service.durationMinutes = durationMinutes
+  } else if (duration !== undefined) {
+    const match = duration.match(/(\d+)/)
+    if (match) {
+      service.durationMinutes = parseInt(match[1], 10)
+    }
+  }
   service.description = description !== undefined ? description : service.description
   service.isPopular = isPopular !== undefined ? isPopular : service.isPopular
   service.isActive = isActive !== undefined ? isActive : service.isActive

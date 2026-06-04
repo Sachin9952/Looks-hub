@@ -27,6 +27,7 @@ import {
   Star,
   ChevronDown,
   Pencil,
+  Search,
 } from "lucide-react";
 
 export const Route = createFileRoute("/admin/dashboard")({
@@ -35,6 +36,7 @@ export const Route = createFileRoute("/admin/dashboard")({
 
 interface Booking {
   _id: string;
+  reference?: string;
   customerName: string;
   phone: string;
   email?: string;
@@ -44,6 +46,7 @@ interface Booking {
   time: string;
   notes?: string;
   status: "pending" | "confirmed" | "completed" | "cancelled";
+  hasConflict?: boolean;
   createdAt: string;
 }
 
@@ -53,6 +56,7 @@ interface Service {
   category: string;
   price: number;
   duration: string;
+  durationMinutes?: number;
   description?: string;
   isPopular: boolean;
   isActive: boolean;
@@ -85,6 +89,10 @@ interface ArtistItem {
   image: string;
   imageUrl?: string;
   imagePublicId?: string;
+  workingHours?: {
+    start: string;
+    end: string;
+  };
 }
 
 interface Stats {
@@ -166,7 +174,7 @@ function AdminDashboardPage() {
   const [showArtistForm, setShowArtistForm] = useState(false);
   const [artistFile, setArtistFile] = useState<File | null>(null);
   const [newArtist, setNewArtist] = useState({
-    name: "", specialty: "", years: 1, rating: 5
+    name: "", specialty: "", years: 1, rating: 5, workingHours: { start: "09:00", end: "18:00" }
   });
   const [editingArtist, setEditingArtist] = useState<ArtistItem | null>(null);
   const [artistUploadProgress, setArtistUploadProgress] = useState(0);
@@ -178,12 +186,13 @@ function AdminDashboardPage() {
   
   // Filters and Forms state
   const [bookingFilter, setBookingFilter] = useState<string>("all");
+  const [adminSearchQuery, setAdminSearchQuery] = useState<string>("");
   const [adminUser, setAdminUser] = useState<any>(null);
 
   // New Items Form states
   const [showServiceForm, setShowServiceForm] = useState(false);
   const [newService, setNewService] = useState({
-    name: "", category: "", price: 0, duration: "", description: "", isPopular: false, isActive: true
+    name: "", category: "", price: 0, duration: "", durationMinutes: 60, description: "", isPopular: false, isActive: true
   });
 
   const [showGalleryForm, setShowGalleryForm] = useState(false);
@@ -327,7 +336,7 @@ function AdminDashboardPage() {
       });
       if (res.ok) {
         setShowServiceForm(false);
-        setNewService({ name: "", category: "", price: 0, duration: "", description: "", isPopular: false, isActive: true });
+        setNewService({ name: "", category: "", price: 0, duration: "", durationMinutes: 60, description: "", isPopular: false, isActive: true });
         fetchDashboardData();
       } else {
         const data = await res.json();
@@ -501,7 +510,8 @@ function AdminDashboardPage() {
         years: Number(newArtist.years),
         rating: Number(newArtist.rating) || 5.0,
         imageUrl: finalImageUrl,
-        imagePublicId: finalImagePublicId
+        imagePublicId: finalImagePublicId,
+        workingHours: newArtist.workingHours
       };
 
       let res;
@@ -523,7 +533,7 @@ function AdminDashboardPage() {
         toast.success(editingArtist ? "Team member updated successfully" : "Team member added successfully");
         setShowArtistForm(false);
         setEditingArtist(null);
-        setNewArtist({ name: "", specialty: "", years: 1, rating: 5 });
+        setNewArtist({ name: "", specialty: "", years: 1, rating: 5, workingHours: { start: "09:00", end: "18:00" } });
         setArtistFile(null);
         setArtistPreviewUrl("");
         setArtistUploadProgress(0);
@@ -557,8 +567,18 @@ function AdminDashboardPage() {
   };
 
   const filteredBookings = bookings.filter((b) => {
-    if (bookingFilter === "all") return true;
-    return b.status === bookingFilter;
+    if (bookingFilter !== "all" && b.status !== bookingFilter) return false;
+    
+    if (adminSearchQuery.trim()) {
+      const q = adminSearchQuery.toLowerCase();
+      const matchName = b.customerName?.toLowerCase().includes(q);
+      const matchPhone = b.phone?.includes(q);
+      const matchRef = b.reference?.toLowerCase().includes(q);
+      const matchId = b._id?.toLowerCase().includes(q);
+      return matchName || matchPhone || matchRef || matchId;
+    }
+    
+    return true;
   });
 
   return (
@@ -733,26 +753,39 @@ function AdminDashboardPage() {
               {/* Bookings Tab */}
               {activeTab === "bookings" && (
                 <div className="space-y-6">
-                  {/* Status filter bar */}
-                  <div className="flex flex-wrap gap-2">
-                    {["all", "pending", "confirmed", "completed", "cancelled"].map((status) => (
-                      <button
-                        key={status}
-                        onClick={() => setBookingFilter(status)}
-                        className={`px-4 py-2 rounded-xl text-xs uppercase tracking-wider font-semibold border transition-all ${
-                          bookingFilter === status
-                            ? "bg-[color:var(--gold)] text-black border-transparent"
-                            : "bg-white/5 border-white/10 hover:border-white/30 text-white/60"
-                        }`}
-                      >
-                        {status}
-                      </button>
-                    ))}
+                  {/* Status filter bar & Search */}
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div className="flex flex-wrap gap-2">
+                      {["all", "pending", "confirmed", "completed", "cancelled"].map((status) => (
+                        <button
+                          key={status}
+                          onClick={() => setBookingFilter(status)}
+                          className={`px-4 py-2 rounded-xl text-xs uppercase tracking-wider font-semibold border transition-all ${
+                            bookingFilter === status
+                              ? "bg-[color:var(--gold)] text-black border-transparent"
+                              : "bg-white/5 border-white/10 hover:border-white/30 text-white/60"
+                          }`}
+                        >
+                          {status}
+                        </button>
+                      ))}
+                    </div>
+                    
+                    <div className="relative max-w-xs w-full">
+                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" />
+                      <input
+                        type="text"
+                        placeholder="Search Guest, Phone, Ref..."
+                        value={adminSearchQuery}
+                        onChange={(e) => setAdminSearchQuery(e.target.value)}
+                        className="w-full bg-white/5 border border-white/10 rounded-xl pl-9 pr-4 py-2 text-xs text-white focus:outline-none focus:border-[color:var(--gold)] focus:ring-1 focus:ring-[color:var(--gold)] transition-all font-light"
+                      />
+                    </div>
                   </div>
 
                   {filteredBookings.length === 0 ? (
                     <div className="bg-black/20 border border-white/10 rounded-3xl p-12 text-center text-white/50">
-                      No appointments matching "{bookingFilter}".
+                      No appointments matching "{bookingFilter}"{adminSearchQuery.trim() && ` and search query "${adminSearchQuery}"`}.
                     </div>
                   ) : (
                     <div className="bg-black/20 border border-white/10 rounded-3xl overflow-hidden shadow-[var(--shadow-soft)]">
@@ -773,6 +806,9 @@ function AdminDashboardPage() {
                               <tr key={b._id} className="hover:bg-white/5 transition-colors">
                                 <td className="p-5">
                                   <div>
+                                    <p className="text-[10px] text-[color:var(--gold)] font-mono font-semibold tracking-wider mb-1">
+                                      {b.reference || b._id.substring(0, 8).toUpperCase()}
+                                    </p>
                                     <p className="font-semibold text-white flex items-center gap-1.5">
                                       <User size={13} className="text-white/40" /> {b.customerName}
                                     </p>
@@ -794,14 +830,21 @@ function AdminDashboardPage() {
                                   </div>
                                 </td>
                                 <td className="p-5">
-                                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider ${
-                                    b.status === "confirmed" ? "bg-blue-500/20 text-blue-400 border border-blue-500/30" :
-                                    b.status === "completed" ? "bg-green-500/20 text-green-400 border border-green-500/30" :
-                                    b.status === "cancelled" ? "bg-red-500/20 text-red-400 border border-red-500/30" :
-                                    "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30"
-                                  }`}>
-                                    {b.status}
-                                  </span>
+                                  <div className="flex flex-col gap-1.5 items-start">
+                                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider ${
+                                      b.status === "confirmed" ? "bg-blue-500/20 text-blue-400 border border-blue-500/30" :
+                                      b.status === "completed" ? "bg-green-500/20 text-green-400 border border-green-500/30" :
+                                      b.status === "cancelled" ? "bg-red-500/20 text-red-400 border border-red-500/30" :
+                                      "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30"
+                                    }`}>
+                                      {b.status}
+                                    </span>
+                                    {b.hasConflict && (
+                                      <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-semibold bg-red-500/20 text-red-400 border border-red-500/30 animate-pulse">
+                                        <AlertCircle size={10} /> Slot Conflict
+                                      </span>
+                                    )}
+                                  </div>
                                 </td>
                                 <td className="p-5 text-right">
                                   <div className="flex justify-end gap-2">
@@ -877,8 +920,12 @@ function AdminDashboardPage() {
                           <input required type="number" value={newService.price} onChange={(e) => setNewService({...newService, price: parseInt(e.target.value) || 0})} className="mt-2 w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white" />
                         </div>
                         <div>
-                          <label className="text-xs uppercase tracking-wider text-white/50">Duration</label>
+                          <label className="text-xs uppercase tracking-wider text-white/50">Duration (Label)</label>
                           <input required value={newService.duration} onChange={(e) => setNewService({...newService, duration: e.target.value})} placeholder="e.g. 90 min" className="mt-2 w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white" />
+                        </div>
+                        <div>
+                          <label className="text-xs uppercase tracking-wider text-white/50">Duration (Minutes)</label>
+                          <input required type="number" min="1" value={newService.durationMinutes} onChange={(e) => setNewService({...newService, durationMinutes: parseInt(e.target.value) || 60})} className="mt-2 w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white" />
                         </div>
                       </div>
                       <div>
@@ -925,7 +972,7 @@ function AdminDashboardPage() {
                                 </td>
                                 <td className="p-5 text-white/60">{s.category}</td>
                                 <td className="p-5 font-medium text-white">₹{s.price}</td>
-                                <td className="p-5 text-white/50">{s.duration}</td>
+                                <td className="p-5 text-white/50">{s.duration} ({s.durationMinutes || 60} mins)</td>
                                 <td className="p-5">
                                   {s.isPopular ? (
                                     <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[color:var(--gold)]/20 text-[color:var(--gold)] border border-[color:var(--gold)]/30">POPULAR</span>
@@ -1123,7 +1170,7 @@ function AdminDashboardPage() {
                         setShowArtistForm(!showArtistForm);
                         if (showArtistForm || editingArtist) {
                           setEditingArtist(null);
-                          setNewArtist({ name: "", specialty: "", years: 1, rating: 5 });
+                          setNewArtist({ name: "", specialty: "", years: 1, rating: 5, workingHours: { start: "09:00", end: "18:00" } });
                           setArtistFile(null);
                           setArtistPreviewUrl("");
                           setArtistUploadProgress(0);
@@ -1156,6 +1203,14 @@ function AdminDashboardPage() {
                         <div>
                           <label className="text-xs uppercase tracking-wider text-white/50">Rating (1.0 - 5.0)</label>
                           <input required disabled={isUploadingArtist} type="number" step="0.1" min="1" max="5" value={newArtist.rating} onChange={(e) => setNewArtist({...newArtist, rating: parseFloat(e.target.value) || 5.0})} className="mt-2 w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white" />
+                        </div>
+                        <div>
+                          <label className="text-xs uppercase tracking-wider text-white/50">Working Hours Start</label>
+                          <input required disabled={isUploadingArtist} type="time" value={newArtist.workingHours?.start || "09:00"} onChange={(e) => setNewArtist({...newArtist, workingHours: { ...(newArtist.workingHours || { start: "09:00", end: "18:00" }), start: e.target.value }})} className="mt-2 w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white" style={{ colorScheme: "dark" }} />
+                        </div>
+                        <div>
+                          <label className="text-xs uppercase tracking-wider text-white/50">Working Hours End</label>
+                          <input required disabled={isUploadingArtist} type="time" value={newArtist.workingHours?.end || "18:00"} onChange={(e) => setNewArtist({...newArtist, workingHours: { ...(newArtist.workingHours || { start: "09:00", end: "18:00" }), end: e.target.value }})} className="mt-2 w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white" style={{ colorScheme: "dark" }} />
                         </div>
                       </div>
                       <div>
@@ -1219,6 +1274,9 @@ function AdminDashboardPage() {
                                   <Star size={11} className="fill-[color:var(--gold)] text-[color:var(--gold)]" /> {a.rating}
                                 </span>
                               </div>
+                              <p className="text-[11px] text-white/40 mt-3 flex items-center gap-1.5">
+                                <Clock size={11} /> Hours: {a.workingHours?.start || "09:00"} - {a.workingHours?.end || "18:00"}
+                              </p>
                             </div>
                           </div>
                           <div className="p-5 pt-0 border-t border-white/5 mt-4 grid grid-cols-2 gap-2">
@@ -1229,7 +1287,8 @@ function AdminDashboardPage() {
                                   name: a.name,
                                   specialty: a.specialty,
                                   years: a.years,
-                                  rating: a.rating
+                                  rating: a.rating,
+                                  workingHours: a.workingHours || { start: "09:00", end: "18:00" }
                                 });
                                 setArtistPreviewUrl(a.imageUrl || a.image);
                                 setShowArtistForm(true);

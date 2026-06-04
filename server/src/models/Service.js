@@ -20,6 +20,10 @@ const serviceSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
+  durationMinutes: {
+    type: Number,
+    default: 60
+  },
   description: {
     type: String,
     trim: true

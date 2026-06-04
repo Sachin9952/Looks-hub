@@ -1,5 +1,6 @@
 import mongoose from 'mongoose'
 import Service from '../models/Service.js'
+import Artist from '../models/Artist.js'
 import Gallery from '../models/Gallery.js'
 import Testimonial from '../models/Testimonial.js'
 
@@ -211,6 +212,150 @@ const seedInitialData = async () => {
   }
 }
 
+const backfillBookings = async () => {
+  try {
+    const bookingsWithoutRef = await Booking.find({
+      $or: [
+        { reference: { $exists: false } },
+        { reference: null },
+        { statusHistory: { $size: 0 } },
+        { statusHistory: { $exists: false } },
+        { durationMinutes: { $exists: false } },
+        { durationMinutes: null }
+      ]
+    }).sort({ createdAt: 1 })
+
+    if (bookingsWithoutRef.length > 0) {
+      console.log(`Backfilling references/status history/durationMinutes for ${bookingsWithoutRef.length} bookings...`)
+      for (const booking of bookingsWithoutRef) {
+        if (!booking.reference) {
+          const year = booking.date ? booking.date.split('-')[0] : new Date(booking.createdAt || Date.now()).getFullYear().toString();
+          const prefix = `LH-${year}-`;
+          
+          const lastBooking = await Booking.findOne({
+            reference: { $regex: new RegExp('^' + prefix) }
+          }).sort({ reference: -1 });
+
+          let sequence = 1;
+          if (lastBooking && lastBooking.reference) {
+            const parts = lastBooking.reference.split('-');
+            const lastSeq = parseInt(parts[2], 10);
+            if (!isNaN(lastSeq)) {
+              sequence = lastSeq + 1;
+            }
+          }
+          booking.reference = `${prefix}${String(sequence).padStart(5, '0')}`;
+        }
+
+        if (!booking.statusHistory || booking.statusHistory.length === 0) {
+          const history = [
+            {
+              status: 'Booking Created',
+              changedAt: booking.createdAt || new Date(),
+              changedBy: 'Customer'
+            }
+          ];
+
+          if (booking.status === 'confirmed') {
+            history.push({
+              status: 'Confirmed',
+              changedAt: booking.updatedAt || new Date(),
+              changedBy: 'Salon Admin'
+            });
+          } else if (booking.status === 'completed') {
+            history.push({
+              status: 'Confirmed',
+              changedAt: booking.updatedAt || new Date(),
+              changedBy: 'Salon Admin'
+            });
+            history.push({
+              status: 'Completed',
+              changedAt: booking.updatedAt || new Date(),
+              changedBy: 'Salon Admin'
+            });
+          } else if (booking.status === 'cancelled') {
+            history.push({
+              status: 'Cancelled',
+              changedAt: booking.updatedAt || new Date(),
+              changedBy: 'Customer'
+            });
+          }
+
+          booking.statusHistory = history;
+        }
+
+        if (!booking.durationMinutes) {
+          let mins = 60;
+          if (booking.duration) {
+            const match = booking.duration.match(/(\d+)/);
+            if (match) {
+              mins = parseInt(match[1], 10);
+            }
+          }
+          booking.durationMinutes = mins;
+        }
+
+        await booking.save();
+      }
+      console.log('Backfilling completed successfully.')
+    }
+  } catch (err) {
+    console.error('Error backfilling bookings:', err)
+  }
+}
+
+const backfillServicesAndArtists = async () => {
+  try {
+    const Service = mongoose.model('Service')
+    const Artist = mongoose.model('Artist')
+
+    // 1. Backfill Services
+    const services = await Service.find({
+      $or: [
+        { durationMinutes: { $exists: false } },
+        { durationMinutes: null }
+      ]
+    })
+    if (services.length > 0) {
+      console.log(`Backfilling durationMinutes for ${services.length} services...`)
+      for (const service of services) {
+        let mins = 60
+        if (service.duration) {
+          const match = service.duration.match(/(\d+)/)
+          if (match) {
+            mins = parseInt(match[1], 10)
+          }
+        }
+        service.durationMinutes = mins
+        await service.save()
+      }
+      console.log('Services durationMinutes backfill completed.')
+    }
+
+    // 2. Backfill Artists
+    const artists = await Artist.find({
+      $or: [
+        { workingHours: { $exists: false } },
+        { 'workingHours.start': { $exists: false } },
+        { 'workingHours.end': { $exists: false } }
+      ]
+    })
+    if (artists.length > 0) {
+      console.log(`Backfilling workingHours for ${artists.length} artists...`)
+      for (const artist of artists) {
+        artist.workingHours = {
+          start: artist.workingHours?.start || "09:00",
+          end: artist.workingHours?.end || "18:00"
+        }
+        await artist.save()
+      }
+      console.log('Artists workingHours backfill completed.')
+    }
+  } catch (err) {
+    console.error('Error backfilling services and artists:', err)
+  }
+}
+
 export const connectDB = async () => {
   try {
     const dbUri = process.env.MONGO_URI || process.env.MONGODB_URI
@@ -221,7 +366,11 @@ export const connectDB = async () => {
     console.log(`MongoDB connected: ${conn.connection.host}`)
     
     // Run background seeding
-    seedInitialData()
+    await seedInitialData()
+    // Run backfill for bookings
+    await backfillBookings()
+    // Run backfill for services and artists
+    await backfillServicesAndArtists()
     
     return conn
   } catch (error) {

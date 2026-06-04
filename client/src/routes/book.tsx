@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, ArrowRight, Check, CalendarDays, Clock, User } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, CalendarDays, Clock, User, AlertCircle } from "lucide-react";
 import { Navbar } from "@/components/site/Navbar";
 import { Footer } from "@/components/site/Footer";
 import { services, artists } from "@/lib/data";
@@ -12,6 +12,8 @@ import { ImageWithFallback } from "@/components/ui/ImageWithFallback";
 
 const bookSearchSchema = z.object({
   service: z.string().optional(),
+  artist: z.string().optional(),
+  notes: z.string().optional(),
 });
 
 export const Route = createFileRoute("/book")({
@@ -29,21 +31,24 @@ const steps = ["Service", "Stylist", "Date & Time", "Details"];
 const times = ["10:00", "11:30", "13:00", "14:30", "16:00", "17:30", "19:00"];
 
 function BookPage() {
-  const { service } = Route.useSearch();
+  const { service, artist, notes } = Route.useSearch();
   const [step, setStep] = useState(0);
   const [done, setDone] = useState(false);
   const [loading, setLoading] = useState(false);
   const [dbServices, setDbServices] = useState<any[]>([]);
   const [dbArtists, setDbArtists] = useState<any[]>([]);
   const [data, setData] = useState({
-    serviceId: service || "",
+    serviceId: "",
     artistId: "",
     date: "",
     time: "",
     name: "",
     phone: "",
-    notes: "",
+    notes: notes || "",
   });
+  const [availableSlots, setAvailableSlots] = useState<string[]>([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchServices = async () => {
@@ -59,6 +64,7 @@ function BookPage() {
               );
               return {
                 id: staticMatch?.id || s._id,
+                _id: s._id,
                 name: s.name,
                 category: s.category,
                 desc: s.description || staticMatch?.desc || s.name,
@@ -68,13 +74,6 @@ function BookPage() {
               };
             });
             setDbServices(mapped);
-            // If dynamic load finished and url query match found, auto select it
-            if (service) {
-              const match = mapped.find((m: any) => m.id === service);
-              if (match) {
-                setData(d => ({ ...d, serviceId: match.id }));
-              }
-            }
             return;
           }
         }
@@ -112,6 +111,82 @@ function BookPage() {
     fetchArtists();
   }, []);
 
+  // Prefill serviceId and artistId from query params once lists are loaded
+  useEffect(() => {
+    if (service && dbServices.length > 0) {
+      const match = dbServices.find(
+        (s: any) => s.id === service || s._id === service || s.name.toLowerCase() === service.toLowerCase()
+      );
+      if (match) {
+        setData(d => ({ ...d, serviceId: match.id }));
+      }
+    }
+  }, [service, dbServices]);
+
+  useEffect(() => {
+    if (artist && dbArtists.length > 0) {
+      const match = dbArtists.find(
+        (a: any) => a.id === artist || a.name.toLowerCase() === artist.toLowerCase()
+      );
+      if (match) {
+        setData(d => ({ ...d, artistId: match.id }));
+      }
+    }
+  }, [artist, dbArtists]);
+
+  // Auto-advance step if query parameters pre-populate selections
+  useEffect(() => {
+    if (service && artist) {
+      setStep(2); // Go straight to Date & Time
+    } else if (service) {
+      setStep(1); // Go straight to Stylist
+    }
+  }, [service, artist]);
+
+  const getTodayString = () => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  useEffect(() => {
+    if (!data.date || !data.artistId || !data.serviceId) {
+      setAvailableSlots([]);
+      return;
+    }
+
+    const fetchAvailableSlots = async () => {
+      setLoadingSlots(true);
+      try {
+        const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+        const queryParams = new URLSearchParams({
+          artistId: data.artistId,
+          date: data.date,
+          serviceId: data.serviceId,
+        });
+        const res = await fetch(`${apiUrl}/bookings/available-slots?${queryParams.toString()}`);
+        if (res.ok) {
+          const resData = await res.json();
+          if (resData.success && Array.isArray(resData.data)) {
+            setAvailableSlots(resData.data);
+            // If the previously selected time is not in the new available slots, clear it
+            if (data.time && !resData.data.includes(data.time)) {
+              setData(d => ({ ...d, time: "" }));
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load available slots:", err);
+      } finally {
+        setLoadingSlots(false);
+      }
+    };
+
+    fetchAvailableSlots();
+  }, [data.date, data.artistId, data.serviceId]);
+
   const next = () => setStep((s) => Math.min(s + 1, steps.length - 1));
   const prev = () => setStep((s) => Math.max(s - 1, 0));
 
@@ -123,6 +198,7 @@ function BookPage() {
 
   const handleSubmit = async () => {
     setLoading(true);
+    setSubmitError(null);
     try {
       const selectedService = dbServices.find((s) => s.id === data.serviceId)?.name || data.serviceId;
       const selectedStylist = dbArtists.find((a) => a.id === data.artistId)?.name || data.artistId;
@@ -141,6 +217,8 @@ function BookPage() {
           date: data.date,
           time: data.time,
           notes: data.notes,
+          serviceId: data.serviceId,
+          barberId: data.artistId,
         }),
       });
 
@@ -161,7 +239,7 @@ function BookPage() {
       setDone(true);
     } catch (err: any) {
       console.error(err);
-      alert(err.message || "Something went wrong while booking. Please try again.");
+      setSubmitError(err.message || "Something went wrong while booking. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -192,136 +270,224 @@ function BookPage() {
 
           <div className="mt-12 bg-card border border-border rounded-[1.75rem] p-6 md:p-10 min-h-[400px]">
             <AnimatePresence mode="wait">
-              <motion.div
-                key={step}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -12 }}
-                transition={{ duration: 0.35 }}
-              >
-                {step === 0 && (
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    {dbServices.map((s) => {
-                      const active = data.serviceId === s.id;
-                      return (
-                        <button
-                          key={s.id}
-                          onClick={() => setData({ ...data, serviceId: s.id })}
-                          className={`text-left flex items-center gap-4 p-3 rounded-2xl border transition-all ${active ? "border-[color:var(--gold)] bg-[color:var(--gold-soft)]/30" : "border-border hover:border-foreground/30"}`}
-                        >
-                          <img src={s.image} alt="" className="w-20 h-20 object-cover rounded-xl" />
-                          <div className="flex-1">
-                            <p className="font-display text-xl">{s.name}</p>
-                            <p className="text-xs text-muted-foreground mt-0.5">{s.duration} · From ₹{s.price.toLocaleString("en-IN")}</p>
-                          </div>
-                          {active && <Check size={18} className="text-[color:var(--gold)]" />}
-                        </button>
-                      );
-                    })}
+              {submitError ? (
+                <motion.div
+                  key="submit-error"
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -12 }}
+                  transition={{ duration: 0.35 }}
+                  className="text-center py-10 px-4 max-w-md mx-auto"
+                >
+                  <div className="w-16 h-16 rounded-full bg-red-500/10 text-red-500 grid place-items-center mx-auto mb-6">
+                    <AlertCircle size={32} />
                   </div>
-                )}
-
-                {step === 1 && (
-                  <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-                    {dbArtists.map((a) => {
-                      const active = data.artistId === a.id;
-                      return (
-                        <button
-                          key={a.id}
-                          onClick={() => setData({ ...data, artistId: a.id })}
-                          className={`text-left rounded-2xl overflow-hidden border transition-all ${active ? "border-[color:var(--gold)] shadow-[var(--shadow-soft)] bg-[color:var(--gold-soft)]/10" : "border-border hover:border-foreground/30"}`}
-                        >
-                          <div className="aspect-square overflow-hidden bg-secondary">
-                            <ImageWithFallback 
-                              src={getOptimizedCloudinaryUrl(a.image, 300, 300)} 
-                              alt={a.name} 
-                              className="w-full h-full object-cover transition-transform duration-500 hover:scale-105" 
-                            />
-                          </div>
-                          <div className="p-3 sm:p-4">
-                            <p className="font-display text-sm sm:text-base md:text-lg leading-snug">{a.name}</p>
-                            <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 truncate">{a.specialty}</p>
-                          </div>
-                        </button>
-                      );
-                    })}
+                  <h3 className="font-display text-2xl mb-3 text-foreground">
+                    Limit Reached
+                  </h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    {submitError.includes("3 active") ? (
+                      <>
+                        You already have 3 active appointments.
+                        <br />
+                        Please complete or cancel one of your existing appointments before booking another.
+                      </>
+                    ) : (
+                      submitError
+                    )}
+                  </p>
+                  <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
+                    <button
+                      onClick={() => {
+                        setSubmitError(null);
+                        setStep(2); // Go back to Date & Time selection
+                      }}
+                      className="btn-ghost-luxe text-xs uppercase tracking-wider py-3 px-6 border border-border hover:border-foreground rounded-full"
+                    >
+                      Adjust Date/Time
+                    </button>
+                    <Link
+                      to="/account/bookings"
+                      className="btn-gold text-xs uppercase tracking-wider py-3 px-6 inline-flex justify-center items-center rounded-full"
+                    >
+                      Manage Bookings
+                    </Link>
                   </div>
-                )}
-
-                {step === 2 && (
-                  <div className="grid gap-8 md:grid-cols-2">
-                    <div>
-                      <label className="text-xs uppercase tracking-[0.18em] text-muted-foreground flex items-center gap-2">
-                        <CalendarDays size={14} /> Select date
-                      </label>
-                      <input
-                        type="date"
-                        value={data.date}
-                        min={new Date().toISOString().split("T")[0]}
-                        onChange={(e) => setData({ ...data, date: e.target.value })}
-                        className="mt-3 w-full bg-secondary/60 border border-border rounded-xl px-4 py-3.5 text-sm focus:outline-none focus:border-[color:var(--gold)]"
-                      />
+                </motion.div>
+              ) : (
+                <motion.div
+                  key={step}
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -12 }}
+                  transition={{ duration: 0.35 }}
+                >
+                  {step === 0 && (
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      {dbServices.map((s) => {
+                        const active = data.serviceId === s.id;
+                        return (
+                          <button
+                            key={s.id}
+                            onClick={() => setData({ ...data, serviceId: s.id })}
+                            className={`text-left flex items-center gap-4 p-3 rounded-2xl border transition-all ${active ? "border-[color:var(--gold)] bg-[color:var(--gold-soft)]/30" : "border-border hover:border-foreground/30"}`}
+                          >
+                            <img src={s.image} alt="" className="w-20 h-20 object-cover rounded-xl" />
+                            <div className="flex-1">
+                              <p className="font-display text-xl">{s.name}</p>
+                              <p className="text-xs text-muted-foreground mt-0.5">{s.duration} · From ₹{s.price.toLocaleString("en-IN")}</p>
+                            </div>
+                            {active && <Check size={18} className="text-[color:var(--gold)]" />}
+                          </button>
+                        );
+                      })}
                     </div>
-                    <div>
-                      <label className="text-xs uppercase tracking-[0.18em] text-muted-foreground flex items-center gap-2">
-                        <Clock size={14} /> Select time
-                      </label>
-                      <div className="mt-3 grid grid-cols-3 sm:grid-cols-4 gap-2">
-                        {times.map((t) => {
-                          const active = data.time === t;
-                          return (
+                  )}
+
+                  {step === 1 && (
+                    <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+                      {dbArtists.map((a) => {
+                        const active = data.artistId === a.id;
+                        return (
+                          <button
+                            key={a.id}
+                            onClick={() => setData({ ...data, artistId: a.id })}
+                            className={`text-left rounded-2xl overflow-hidden border transition-all ${active ? "border-[color:var(--gold)] shadow-[var(--shadow-soft)] bg-[color:var(--gold-soft)]/10" : "border-border hover:border-foreground/30"}`}
+                          >
+                            <div className="aspect-square overflow-hidden bg-secondary">
+                              <ImageWithFallback 
+                                src={getOptimizedCloudinaryUrl(a.image, 300, 300)} 
+                                alt={a.name} 
+                                className="w-full h-full object-cover transition-transform duration-500 hover:scale-105" 
+                              />
+                            </div>
+                            <div className="p-3 sm:p-4">
+                              <p className="font-display text-sm sm:text-base md:text-lg leading-snug">{a.name}</p>
+                              <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 truncate">{a.specialty}</p>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {step === 2 && (
+                    <div className="grid gap-8 md:grid-cols-2">
+                      <div>
+                        <label className="text-xs uppercase tracking-[0.18em] text-muted-foreground flex items-center gap-2">
+                          <CalendarDays size={14} /> Select date
+                        </label>
+                        <input
+                          type="date"
+                          value={data.date}
+                          min={getTodayString()}
+                          onChange={(e) => setData({ ...data, date: e.target.value })}
+                          className="mt-3 w-full bg-secondary/60 border border-border rounded-xl px-4 py-3.5 text-sm focus:outline-none focus:border-[color:var(--gold)]"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs uppercase tracking-[0.18em] text-muted-foreground flex items-center gap-2">
+                          <Clock size={14} /> Select time
+                        </label>
+                        
+                        {loadingSlots ? (
+                          <div className="mt-3 grid grid-cols-3 gap-2">
+                            {[1, 2, 3, 4, 5, 6].map((idx) => (
+                              <div key={idx} className="h-10 rounded-xl bg-secondary/80 animate-pulse border border-border/50" />
+                            ))}
+                          </div>
+                        ) : !data.date ? (
+                          <div className="mt-3 p-6 text-center border border-dashed border-border rounded-2xl text-xs text-muted-foreground bg-secondary/10">
+                            Please select a date to view available slots.
+                          </div>
+                        ) : availableSlots.length === 0 ? (
+                          <div className="mt-3 p-6 text-center border border-dashed border-border rounded-2xl bg-secondary/15">
+                            {data.date === getTodayString() ? (
+                              <>
+                                <p className="text-sm font-display text-muted-foreground">No bookable slots remain today.</p>
+                                <p className="text-xs text-muted-foreground mt-1">Please select another date.</p>
+                              </>
+                            ) : (
+                              <p className="text-sm font-display text-muted-foreground">Fully Booked for this day</p>
+                            )}
                             <button
-                              key={t}
-                              onClick={() => setData({ ...data, time: t })}
-                              className={`py-2.5 rounded-xl text-sm border transition-all ${active ? "bg-[color:var(--charcoal)] text-[color:var(--cream)] border-transparent" : "border-border hover:border-foreground/30"}`}
+                              type="button"
+                              onClick={() => setData(d => ({ ...d, date: "" }))}
+                              className="mt-3 text-xs font-semibold text-[color:var(--gold)] hover:underline"
                             >
-                              {t}
+                              Choose Another Date
                             </button>
-                          );
-                        })}
+                          </div>
+                        ) : (
+                          <>
+                            <div className="mt-3 grid grid-cols-3 gap-2 max-h-[220px] overflow-y-auto pr-1">
+                              {availableSlots.map((t) => {
+                                const active = data.time === t;
+                                return (
+                                  <button
+                                    key={t}
+                                    type="button"
+                                    onClick={() => setData({ ...data, time: t })}
+                                    className={`py-2.5 rounded-xl text-sm border transition-all ${active ? "bg-[color:var(--charcoal)] text-[color:var(--cream)] border-transparent" : "border-border hover:border-foreground/30 bg-secondary/20"}`}
+                                  >
+                                    {t}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            
+                            {/* Info Badge */}
+                            <div className="mt-4 flex items-center gap-2 px-3 py-2 rounded-xl bg-[color:var(--gold-soft)]/10 border border-[color:var(--gold)]/20 text-[color:var(--gold)] text-xs">
+                              <Clock size={12} className="shrink-0" />
+                              <span>Appointments require at least 2 hours advance notice.</span>
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
-                {step === 3 && (
-                  <div className="grid gap-5 max-w-xl">
-                    <Field label="Full name" icon={<User size={14} />}>
-                      <input value={data.name} onChange={(e) => setData({ ...data, name: e.target.value })} placeholder="e.g. Priya Kapoor" className="input-luxe" />
-                    </Field>
-                    <Field label="Phone">
-                      <input 
-                        type="tel" 
-                        value={data.phone} 
-                        onChange={(e) => setData({ ...data, phone: e.target.value.replace(/(?!^\+)[^\d]/g, "") })} 
-                        placeholder="+91 ..." 
-                        className="input-luxe" 
-                      />
-                    </Field>
-                    <Field label="Notes (optional)">
-                      <textarea value={data.notes} onChange={(e) => setData({ ...data, notes: e.target.value })} rows={4} placeholder="Anything we should know — allergies, references, occasion..." className="input-luxe resize-none" />
-                    </Field>
-                  </div>
-                )}
-              </motion.div>
+                  {step === 3 && (
+                    <div className="grid gap-5 max-w-xl">
+                      <Field label="Full name" icon={<User size={14} />}>
+                        <input value={data.name} onChange={(e) => setData({ ...data, name: e.target.value })} placeholder="e.g. Priya Kapoor" className="input-luxe" />
+                      </Field>
+                      <Field label="Phone">
+                        <input 
+                          type="tel" 
+                          value={data.phone} 
+                          onChange={(e) => setData({ ...data, phone: e.target.value.replace(/(?!^\+)[^\d]/g, "") })} 
+                          placeholder="+91 ..." 
+                          className="input-luxe" 
+                        />
+                      </Field>
+                      <Field label="Notes (optional)">
+                        <textarea value={data.notes} onChange={(e) => setData({ ...data, notes: e.target.value })} rows={4} placeholder="Anything we should know — allergies, references, occasion..." className="input-luxe resize-none" />
+                      </Field>
+                    </div>
+                  )}
+                </motion.div>
+              )}
             </AnimatePresence>
           </div>
 
           {/* Controls */}
-          <div className="mt-8 flex items-center justify-between">
-            <button onClick={prev} disabled={step === 0 || loading} className="btn-ghost-luxe disabled:opacity-40 disabled:pointer-events-none">
-              <ArrowLeft size={16} /> Back
-            </button>
-            {step < steps.length - 1 ? (
-              <button onClick={next} disabled={!canNext} className="btn-gold disabled:opacity-40 disabled:pointer-events-none">
-                Continue <ArrowRight size={16} />
+          {!submitError && (
+            <div className="mt-8 flex items-center justify-between">
+              <button onClick={prev} disabled={step === 0 || loading} className="btn-ghost-luxe disabled:opacity-40 disabled:pointer-events-none">
+                <ArrowLeft size={16} /> Back
               </button>
-            ) : (
-              <button onClick={handleSubmit} disabled={!canNext || loading} className="btn-gold disabled:opacity-40 disabled:pointer-events-none">
-                {loading ? "Submitting..." : "Confirm Booking"} <Check size={16} />
-              </button>
-            )}
-          </div>
+              {step < steps.length - 1 ? (
+                <button onClick={next} disabled={!canNext} className="btn-gold disabled:opacity-40 disabled:pointer-events-none">
+                  Continue <ArrowRight size={16} />
+                </button>
+              ) : (
+                <button onClick={handleSubmit} disabled={!canNext || loading} className="btn-gold disabled:opacity-40 disabled:pointer-events-none">
+                  {loading ? "Submitting..." : "Confirm Booking"} <Check size={16} />
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </main>
       <Footer />

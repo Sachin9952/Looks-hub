@@ -35,7 +35,7 @@ export function Testimonials() {
   }, []);
 
   return (
-    <section className="py-28 md:py-36">
+    <section id="testimonials" className="py-28 md:py-36">
       <div className="container-luxe">
         <div className="max-w-2xl">
           <p className="eyebrow">Kind Words</p>

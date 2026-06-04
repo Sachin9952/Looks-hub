@@ -10,7 +10,8 @@ import {
   cancelBooking,
   reviewBooking,
   updateBookingStatus,
-  deleteBooking
+  deleteBooking,
+  getAvailableSlots
 } from '../controllers/bookingController.js'
 import { protectAdmin } from '../middleware/authMiddleware.js'
 import { validate } from '../middleware/validateMiddleware.js'
@@ -48,6 +49,7 @@ router.post(
 
 // Public Dashboard Queries
 router.get('/', optionalAdmin, getBookings)
+router.get('/available-slots', getAvailableSlots)
 router.get('/:id', getBookingById)
 
 // Booking Actions (Public)
