@@ -11,7 +11,8 @@ import {
   reviewBooking,
   updateBookingStatus,
   deleteBooking,
-  getAvailableSlots
+  getAvailableSlots,
+  lookupBooking
 } from '../controllers/bookingController.js'
 import { protectAdmin } from '../middleware/authMiddleware.js'
 import { validate } from '../middleware/validateMiddleware.js'
@@ -51,6 +52,21 @@ router.post(
 router.get('/', optionalAdmin, getBookings)
 router.get('/available-slots', getAvailableSlots)
 router.get('/:id', getBookingById)
+
+// Secure Booking Lookup (Public)
+router.post(
+  '/lookup',
+  [
+    body('reference')
+      .notEmpty().withMessage('Booking reference is required').trim()
+      .matches(/^LH-\d{4}-\d{5}$/i).withMessage('Booking reference format must be LH-YYYY-XXXXX'),
+    body('phone')
+      .notEmpty().withMessage('Phone number is required').trim()
+      .isLength({ min: 10, max: 15 }).withMessage('Phone number must be between 10 and 15 digits')
+  ],
+  validate,
+  lookupBooking
+)
 
 // Booking Actions (Public)
 router.patch('/reschedule', rescheduleBooking)

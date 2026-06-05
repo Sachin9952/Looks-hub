@@ -244,8 +244,13 @@ export const createBooking = asyncHandler(async (req, res) => {
 export const getBookings = asyncHandler(async (req, res) => {
   const { phone, email, userId } = req.query
 
-  // If search query is provided, return matching bookings
+  // If search query is provided, return matching bookings ONLY if admin is authenticated
   if (phone || email || userId) {
+    const isAdmin = await isAdminRequest(req)
+    if (!isAdmin) {
+      return sendError(res, 'Unauthorized query. Customer lookups must use the secure lookup endpoint.', 403)
+    }
+
     const query = { $or: [] }
     if (phone) query.$or.push({ phone: phone.trim() })
     if (email) query.$or.push({ email: email.trim().toLowerCase() })
@@ -578,4 +583,45 @@ export const getAvailableSlots = asyncHandler(async (req, res) => {
   console.log('[DEBUG] generated slots:', availableSlots)
 
   sendSuccess(res, availableSlots, 'Available slots retrieved successfully')
+})
+
+// @desc    Lookup a booking by reference and phone
+// @route   POST /api/bookings/lookup
+// @access  Public
+export const lookupBooking = asyncHandler(async (req, res) => {
+  const { reference, phone } = req.body
+
+  if (!reference || !phone) {
+    return sendError(res, 'Booking reference and phone number are required', 400)
+  }
+
+  // Find booking by reference (exact case-insensitive match)
+  const booking = await Booking.findOne({ 
+    reference: { $regex: new RegExp(`^${reference.trim()}$`, 'i') } 
+  })
+
+  if (!booking) {
+    return sendError(res, 'Booking not found', 404)
+  }
+
+  // Normalize phone numbers for comparison
+  const normalize = (p) => p.replace(/(?!^\+)[^\d]/g, '').trim()
+  const dbPhone = normalize(booking.phone)
+  const inputPhone = normalize(phone)
+
+  // Verify phone matches (supporting full match or matching endsWith if at least 10 digits)
+  const match = dbPhone === inputPhone || 
+                (dbPhone.length >= 10 && inputPhone.length >= 10 && (dbPhone.endsWith(inputPhone) || inputPhone.endsWith(dbPhone)))
+
+  if (!match) {
+    return sendError(res, 'Phone number does not match booking', 403)
+  }
+
+  // Return booking object
+  return res.status(200).json({
+    success: true,
+    message: 'Booking retrieved successfully',
+    data: booking,
+    booking: booking
+  })
 })

@@ -5,30 +5,42 @@ import { artists as defaultArtists } from "@/lib/data";
 import { getOptimizedCloudinaryUrl } from "@/lib/utils";
 import { ImageWithFallback } from "@/components/ui/ImageWithFallback";
 
+import { useQuery } from "@tanstack/react-query";
+import { ArtistsSkeleton } from "./skeletons";
+
 export function Artists() {
   const shouldReduceMotion = useReducedMotion();
-  const [artistsList, setArtistsList] = useState<any[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const fetchArtists = async () => {
-      try {
-        const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
-        const res = await fetch(`${apiUrl}/artists`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.success && data.data && data.data.length > 0) {
-            setArtistsList(data.data);
-            return;
-          }
-        }
-      } catch (err) {
-        console.error("Failed to load artists from API:", err);
+  const { data: artistsList, isLoading, error } = useQuery<any[]>({
+    queryKey: ["artists"],
+    queryFn: async () => {
+      const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+      const res = await fetch(`${apiUrl}/artists`);
+      if (!res.ok) {
+        throw new Error("Failed to fetch artists");
       }
-      setArtistsList(defaultArtists);
-    };
-    fetchArtists();
-  }, []);
+      const data = await res.json();
+      if (data.success && data.data && data.data.length > 0) {
+        return data.data;
+      }
+      throw new Error("No artists found");
+    }
+  });
+
+  if (isLoading) {
+    return <ArtistsSkeleton />;
+  }
+
+  if (error || !artistsList) {
+    return (
+      <section id="artists" className="pt-8 pb-20 md:pt-12 md:pb-28 flex items-center justify-center min-h-[300px]">
+        <div className="text-center font-display text-lg text-muted-foreground">
+          Unable to load content. Please try again.
+        </div>
+      </section>
+    );
+  }
 
   const handleScroll = (direction: "left" | "right") => {
     if (scrollRef.current) {

@@ -474,16 +474,28 @@ function BookPage() {
           {/* Controls */}
           {!submitError && (
             <div className="mt-8 flex items-center justify-between">
-              <button onClick={prev} disabled={step === 0 || loading} className="btn-ghost-luxe disabled:opacity-40 disabled:pointer-events-none">
-                <ArrowLeft size={16} /> Back
+              <button 
+                onClick={prev} 
+                disabled={step === 0 || loading} 
+                className="btn-ghost-luxe text-xs md:text-sm font-semibold tracking-widest uppercase py-3.5 px-8 disabled:opacity-40 disabled:pointer-events-none"
+              >
+                <ArrowLeft size={16} className="mr-1" /> BACK
               </button>
               {step < steps.length - 1 ? (
-                <button onClick={next} disabled={!canNext} className="btn-gold disabled:opacity-40 disabled:pointer-events-none">
-                  Continue <ArrowRight size={16} />
+                <button 
+                  onClick={next} 
+                  disabled={!canNext} 
+                  className="btn-gold !bg-[color:var(--gold)] !text-[color:var(--charcoal)] hover:!bg-[color:var(--charcoal)] hover:!text-[color:var(--cream)] text-xs md:text-sm font-semibold tracking-widest uppercase py-3.5 px-8 disabled:opacity-40 disabled:pointer-events-none"
+                >
+                  CONTINUE <ArrowRight size={16} className="ml-1" />
                 </button>
               ) : (
-                <button onClick={handleSubmit} disabled={!canNext || loading} className="btn-gold disabled:opacity-40 disabled:pointer-events-none">
-                  {loading ? "Submitting..." : "Confirm Booking"} <Check size={16} />
+                <button 
+                  onClick={handleSubmit} 
+                  disabled={!canNext || loading} 
+                  className="btn-gold !bg-[color:var(--gold)] !text-[color:var(--charcoal)] hover:!bg-[color:var(--charcoal)] hover:!text-[color:var(--cream)] text-xs md:text-sm font-semibold tracking-widest uppercase py-3.5 px-8 disabled:opacity-40 disabled:pointer-events-none"
+                >
+                  {loading ? "SUBMITTING..." : "CONFIRM BOOKING"} <Check size={16} className="ml-1" />
                 </button>
               )}
             </div>

@@ -29,5 +29,7 @@ const gallerySchema = new mongoose.Schema({
   timestamps: true
 })
 
+gallerySchema.index({ isFeatured: 1, createdAt: -1 })
+
 const Gallery = mongoose.model('Gallery', gallerySchema)
 export default Gallery

@@ -7,7 +7,7 @@ import { cloudinary } from '../config/cloudinary.js'
 // @route   GET /api/artists
 // @access  Public
 export const getArtists = asyncHandler(async (req, res) => {
-  let artists = await Artist.find({}).sort({ createdAt: -1 })
+  let artists = await Artist.find({}).sort({ createdAt: -1 }).lean()
 
   if (artists.length === 0) {
     const dummyArtists = [
@@ -44,7 +44,8 @@ export const getArtists = asyncHandler(async (req, res) => {
         imagePublicId: "barbers/dummy-esthetician"
       }
     ]
-    artists = await Artist.insertMany(dummyArtists)
+    const inserted = await Artist.insertMany(dummyArtists)
+    artists = inserted.map(doc => doc.toObject())
   }
 
   sendSuccess(res, artists, 'Artists retrieved successfully')

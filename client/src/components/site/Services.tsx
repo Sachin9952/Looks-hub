@@ -3,6 +3,8 @@ import { motion } from "framer-motion";
 import { Link } from "@tanstack/react-router";
 import { ArrowRight } from "lucide-react";
 import { servicesData } from "@/data/servicesData";
+import { useQuery } from "@tanstack/react-query";
+import { ServicesSkeleton } from "./skeletons";
 
 import hair from "@/assets/service-hair.jpg";
 import spa from "@/assets/service-spa.jpg";
@@ -25,65 +27,65 @@ export const getServiceImage = (serviceName: string) => {
 };
 
 export function Services() {
-  const [featuredServices, setFeaturedServices] = useState<any[]>([]);
-
-  useEffect(() => {
-    const fetchServices = async () => {
-      try {
-        const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
-        const res = await fetch(`${apiUrl}/services`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.success && data.data && data.data.length > 0) {
-            const allServices = data.data.filter((s: any) => s.isActive);
-            const haircut = allServices.find((s: any) => s.name.toLowerCase().includes("haircut"));
-            const spaItem = allServices.find((s: any) => s.name.toLowerCase().includes("spa"));
-            const colorItem = allServices.find((s: any) => s.name.toLowerCase().includes("color"));
-            
-            const selected = [
-              haircut || allServices[0],
-              spaItem || allServices[1],
-              colorItem || allServices[2]
-            ].filter(Boolean);
-
-            const mapped = selected.map((s: any) => {
-              // Find matching details from static data by name
-              const staticMatch = servicesData.find(
-                (sd) => sd.title.toLowerCase() === s.name.toLowerCase()
-              );
-              return {
-                id: staticMatch?.id || s._id,
-                title: s.name,
-                category: s.category,
-                shortDescription: s.description || staticMatch?.shortDescription || s.name,
-                startingPrice: s.price,
-                duration: s.duration,
-                image: getServiceImage(s.name)
-              };
-            });
-            setFeaturedServices(mapped);
-            return;
-          }
-        }
-      } catch (err) {
-        console.error("Failed to load services from API:", err);
+  const { data: featuredServices, isLoading, error } = useQuery<any[]>({
+    queryKey: ["services"],
+    queryFn: async () => {
+      const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+      const res = await fetch(`${apiUrl}/services`);
+      if (!res.ok) {
+        throw new Error("Failed to fetch services");
       }
-      
-      // Fallback
-      setFeaturedServices([
-        { ...servicesData[0], title: servicesData[0].title, shortDescription: servicesData[0].shortDescription, startingPrice: servicesData[0].startingPrice },
-        { ...servicesData[1], title: servicesData[1].title, shortDescription: servicesData[1].shortDescription, startingPrice: servicesData[1].startingPrice },
-        { ...servicesData[2], title: servicesData[2].title, shortDescription: servicesData[2].shortDescription, startingPrice: servicesData[2].startingPrice }
-      ]);
-    };
-    fetchServices();
-  }, []);
+      const data = await res.json();
+      if (data.success && data.data && data.data.length > 0) {
+        const allServices = data.data.filter((s: any) => s.isActive);
+        const haircut = allServices.find((s: any) => s.name.toLowerCase().includes("haircut"));
+        const spaItem = allServices.find((s: any) => s.name.toLowerCase().includes("spa"));
+        const colorItem = allServices.find((s: any) => s.name.toLowerCase().includes("color"));
+        
+        const selected = [
+          haircut || allServices[0],
+          spaItem || allServices[1],
+          colorItem || allServices[2]
+        ].filter(Boolean);
+
+        return selected.map((s: any) => {
+          const staticMatch = servicesData.find(
+            (sd) => sd.title.toLowerCase() === s.name.toLowerCase()
+          );
+          return {
+            id: staticMatch?.id || s._id,
+            title: s.name,
+            category: s.category,
+            shortDescription: s.description || staticMatch?.shortDescription || s.name,
+            startingPrice: s.price,
+            duration: s.duration,
+            image: getServiceImage(s.name)
+          };
+        });
+      }
+      throw new Error("No services found");
+    }
+  });
 
   const serviceLabels = [
     "Signature Hair Artistry",
     "Rejuvenating Treatments",
     "Restoration Rituals",
   ];
+
+  if (isLoading) {
+    return <ServicesSkeleton />;
+  }
+
+  if (error || !featuredServices) {
+    return (
+      <section id="services" className="relative pt-20 pb-4 md:pt-32 md:pb-8 bg-[color:var(--cream)] text-[color:var(--charcoal)] flex items-center justify-center min-h-[300px]">
+        <div className="text-center font-display text-lg text-[color:var(--charcoal)]/80">
+          Unable to load content. Please try again.
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section id="services" className="relative pt-20 pb-4 md:pt-32 md:pb-8 bg-[color:var(--cream)] text-[color:var(--charcoal)]">

@@ -7,11 +7,17 @@ import { sendSuccess, sendError } from '../utils/responseHandler.js'
 // @access  Public
 export const getServices = asyncHandler(async (req, res) => {
   const query = {}
+  let selectFields = '_id name category price duration description isPopular isActive'
+
   // Non-admins only see active services
   if (!req.headers.authorization) {
     query.isActive = true
+    selectFields = '_id name category price duration description isPopular isActive'
   }
-  const services = await Service.find(query).sort({ category: 1, name: 1 })
+  const services = await Service.find(query)
+    .select(selectFields)
+    .sort({ category: 1, name: 1 })
+    .lean()
   sendSuccess(res, services, 'Services retrieved successfully')
 })
 

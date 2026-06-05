@@ -30,5 +30,7 @@ const testimonialSchema = new mongoose.Schema({
   timestamps: true
 })
 
+testimonialSchema.index({ isFeatured: 1, createdAt: -1 })
+
 const Testimonial = mongoose.model('Testimonial', testimonialSchema)
 export default Testimonial

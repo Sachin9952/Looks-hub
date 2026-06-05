@@ -3,6 +3,8 @@ import cors from 'cors'
 import dotenv from 'dotenv'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import compression from 'compression'
+import helmet from 'helmet'
 
 // Import routes
 import authRoutes from './routes/authRoutes.js'
@@ -25,6 +27,13 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const app = express()
+
+// Security and Compression middlewares
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+}))
+app.use(compression())
 
 // Middleware
 const allowedOrigins = [
@@ -65,8 +74,11 @@ app.use('/api/upload', uploadRoutes)
 app.use('/api/artists', artistRoutes)
 app.use('/api/barbers', barberRoutes)
 
-// Serve uploads static folder
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')))
+// Serve uploads static folder with 1 year cache headers
+app.use('/uploads', express.static(path.join(__dirname, '../uploads'), {
+  maxAge: '1y',
+  etag: true
+}))
 
 // Base Welcome Route
 app.get('/', (req, res) => {

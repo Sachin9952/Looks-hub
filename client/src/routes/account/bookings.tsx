@@ -98,7 +98,7 @@ const VisualJourneyTracker = ({ status }: { status: string }) => {
   
   if (isCancelled) {
     return (
-      <div className="mt-4 pt-4 border-t border-[color:var(--charcoal)]/5 flex items-center gap-4">
+      <div className="mt-6 pt-4 border-t border-[color:var(--charcoal)]/5 flex items-center gap-4">
         <div className="flex items-center gap-2 text-xs font-medium text-[color:var(--gold)]">
           <span className="w-5 h-5 rounded-full bg-[color:var(--gold)]/10 text-[color:var(--gold)] flex items-center justify-center text-[10px]">✓</span>
           <span>Booked</span>
@@ -120,34 +120,34 @@ const VisualJourneyTracker = ({ status }: { status: string }) => {
 
   return (
     <div className="mt-6 pt-4 border-t border-[color:var(--charcoal)]/5 w-full">
-      <div className="flex items-center justify-between max-w-md">
+      <div className="relative flex justify-between items-start w-full max-w-md mx-auto pt-1">
+        {/* Connecting line background */}
+        <div className="absolute top-[11px] left-[16.67%] right-[16.67%] h-[2.5px] bg-[color:var(--charcoal)]/10 rounded-full -z-0" />
+        
+        {/* Connecting line active fill */}
+        <div
+          className="absolute top-[11px] left-[16.67%] h-[2.5px] bg-[color:var(--gold)] rounded-full transition-all duration-700 ease-out -z-0"
+          style={{
+            width: status === "completed" ? "66.67%" : status === "confirmed" ? "33.33%" : "0%"
+          }}
+        />
+
         {steps.map((stepVal, idx) => (
-          <div key={stepVal.label} className="flex items-center flex-1 last:flex-none">
-            <div className="flex items-center gap-2">
-              <div
-                className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold transition-all duration-500 ${
-                  stepVal.completed 
-                    ? "bg-[color:var(--gold)] text-black shadow-sm" 
-                    : "border border-[color:var(--charcoal)]/20 text-[color:var(--charcoal)]/40 bg-transparent"
-                }`}
-              >
-                {stepVal.completed ? "✓" : "○"}
-              </div>
-              <span className={`text-[10px] sm:text-xs uppercase tracking-wider font-semibold transition-colors duration-500 ${
-                stepVal.active ? "text-[color:var(--charcoal)]" : "text-[color:var(--charcoal)]/40"
-              }`}>
-                {stepVal.label}
-              </span>
+          <div key={stepVal.label} className="flex flex-col items-center flex-1 text-center relative z-10">
+            <div
+              className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold transition-all duration-500 ${
+                stepVal.completed 
+                  ? "bg-[color:var(--gold)] text-black shadow-sm" 
+                  : "border border-[color:var(--charcoal)]/20 text-[color:var(--charcoal)]/40 bg-[color:var(--cream)]"
+              }`}
+            >
+              {stepVal.completed ? "✓" : "○"}
             </div>
-            
-            {idx < steps.length - 1 && (
-              <div className="flex-1 mx-3 h-[2.5px] min-w-[20px] bg-[color:var(--charcoal)]/10 rounded-full overflow-hidden relative">
-                <div
-                  className="absolute top-0 left-0 h-full bg-[color:var(--gold)] transition-all duration-700 ease-out"
-                  style={{ width: stepVal.completed && steps[idx+1].completed ? "100%" : "0%" }}
-                />
-              </div>
-            )}
+            <span className={`text-[10px] sm:text-xs uppercase tracking-wider font-semibold mt-2 transition-colors duration-500 ${
+              stepVal.active ? "text-[color:var(--charcoal)]" : "text-[color:var(--charcoal)]/40"
+            }`}>
+              {stepVal.label}
+            </span>
           </div>
         ))}
       </div>
@@ -216,8 +216,8 @@ const AppointmentCountdown = ({ dateStr, timeStr }: { dateStr: string; timeStr: 
   if (!timeLeft) return null;
 
   return (
-    <div className="mt-4 p-3.5 bg-[color:var(--gold-soft)]/20 border border-[color:var(--gold)]/20 rounded-2xl flex items-center justify-between text-xs sm:text-sm">
-      <span className="text-[color:var(--charcoal)]/60 font-light flex items-center gap-1.5">
+    <div className="mt-4 p-3.5 bg-[color:var(--gold-soft)]/20 border border-[color:var(--gold)]/20 rounded-2xl flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 text-xs sm:text-sm">
+      <span className="text-[color:var(--charcoal)]/60 font-light flex items-center gap-1.5 shrink-0">
         <Clock size={13} className="text-[color:var(--gold)]" /> Appointment In:
       </span>
       <span className="font-semibold text-[color:var(--gold)] tracking-wide text-right">{timeLeft}</span>
@@ -238,7 +238,7 @@ const Timeline = ({ history }: { history: any[] }) => {
     <div className="mt-4 pt-4 border-t border-[color:var(--charcoal)]/5">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-1.5 text-xs text-[color:var(--charcoal)]/60 hover:text-[color:var(--charcoal)] transition-colors focus:outline-none"
+        className="flex items-center gap-1.5 text-xs text-[color:var(--charcoal)]/60 hover:text-[color:var(--charcoal)] transition-colors focus:outline-none cursor-pointer"
       >
         <span>{isOpen ? "Hide Timeline Details" : "Show Status Timeline"}</span>
         {isOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
@@ -310,7 +310,9 @@ const formatDateTime = (dateStr: string, timeStr: string) => {
 
 function BookingsDashboard() {
   const navigate = useNavigate();
-  const [phoneQuery, setPhoneQuery] = useState("");
+  const [lookupReference, setLookupReference] = useState("");
+  const [lookupPhone, setLookupPhone] = useState("");
+  const [lookupError, setLookupError] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
@@ -335,43 +337,46 @@ function BookingsDashboard() {
 
   const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
-  const fetchBookings = async (phoneToUse?: string) => {
+  const fetchBookings = async () => {
     setLoading(true);
     try {
-      const searchPhone = phoneToUse || phoneQuery || localStorage.getItem("looks_hub_phone") || "";
       let fetchedBookings: Booking[] = [];
 
-      if (searchPhone) {
-        try {
-          const res = await fetch(`${apiUrl}/bookings?phone=${encodeURIComponent(searchPhone)}`);
-          if (res.ok) {
-            const resData = await res.json();
-            if (resData.success && Array.isArray(resData.data)) {
-              fetchedBookings = resData.data;
-            }
-          }
-        } catch (err) {
-          console.error("Failed to fetch bookings by phone:", err);
-        }
-      }
+      // Merge with localStorage booking IDs if they exist in either looks_hub_bookings or bookingIds
+      const localBookingIds = JSON.parse(
+        localStorage.getItem("looks_hub_bookings") || 
+        localStorage.getItem("bookingIds") || 
+        "[]"
+      );
 
-      // Merge with localStorage booking IDs if they are not already in the list
-      const localBookingIds = JSON.parse(localStorage.getItem("looks_hub_bookings") || "[]");
       if (localBookingIds.length > 0) {
+        const validLocalBookingIds = [...localBookingIds];
+        let wasModified = false;
+
         for (const id of localBookingIds) {
-          if (!fetchedBookings.some((b) => b._id === id)) {
-            try {
-              const res = await fetch(`${apiUrl}/bookings/${id}`);
-              if (res.ok) {
-                const data = await res.json();
-                if (data.success && data.data) {
-                  fetchedBookings.push(data.data);
-                }
+          try {
+            const res = await fetch(`${apiUrl}/bookings/${id}`);
+            if (res.ok) {
+              const data = await res.json();
+              if (data.success && data.data) {
+                fetchedBookings.push(data.data);
               }
-            } catch (err) {
-              console.error(`Failed to fetch individual booking ${id}:`, err);
+            } else if (res.status === 404) {
+              // Remove invalid/deleted booking from local storage
+              const idx = validLocalBookingIds.indexOf(id);
+              if (idx > -1) {
+                validLocalBookingIds.splice(idx, 1);
+                wasModified = true;
+              }
             }
+          } catch (err) {
+            console.error(`Failed to fetch individual booking ${id}:`, err);
           }
+        }
+
+        if (wasModified) {
+          localStorage.setItem("looks_hub_bookings", JSON.stringify(validLocalBookingIds));
+          localStorage.setItem("bookingIds", JSON.stringify(validLocalBookingIds));
         }
       }
 
@@ -379,16 +384,11 @@ function BookingsDashboard() {
       fetchedBookings.sort((a, b) => new Date(`${b.date}T${b.time}`).getTime() - new Date(`${a.date}T${a.time}`).getTime());
       
       setBookings(fetchedBookings);
-
-      if (searchPhone && (phoneToUse || phoneQuery)) {
-        localStorage.setItem("looks_hub_phone", searchPhone);
-      }
     } catch (err: any) {
       console.error(err);
       toast.error(err.message || "Something went wrong fetching bookings.");
     } finally {
       setLoading(false);
-      setIsSearching(false);
     }
   };
 
@@ -396,14 +396,86 @@ function BookingsDashboard() {
     fetchBookings();
   }, []);
 
-  const handleSearchSubmit = (e: React.FormEvent) => {
+  const handleLookupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!phoneQuery.trim()) {
-      toast.error("Please enter a valid phone number");
+    setLookupError(null);
+
+    const refVal = lookupReference.trim();
+    const phoneVal = lookupPhone.trim();
+
+    if (!refVal) {
+      setLookupError("Booking reference is required");
       return;
     }
+
+    // Reference validation format LH-YYYY-XXXXX
+    if (!/^LH-\d{4}-\d{5}$/i.test(refVal)) {
+      setLookupError("Invalid booking reference");
+      return;
+    }
+
+    if (!phoneVal) {
+      setLookupError("Phone number is required");
+      return;
+    }
+
     setIsSearching(true);
-    fetchBookings(phoneQuery);
+    try {
+      const res = await fetch(`${apiUrl}/bookings/lookup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reference: refVal, phone: phoneVal })
+      });
+
+      const resData = await res.json();
+
+      if (res.ok) {
+        if (resData.success && resData.data) {
+          const booking = resData.data;
+
+          // Merge booking into local state if not already there
+          setBookings((prev) => {
+            if (prev.some((b) => b._id === booking._id)) {
+              return prev;
+            }
+            const updated = [booking, ...prev];
+            updated.sort((a, b) => new Date(`${b.date}T${b.time}`).getTime() - new Date(`${a.date}T${a.time}`).getTime());
+            return updated;
+          });
+
+          // Store in both localStorage keys
+          const currentIds = JSON.parse(
+            localStorage.getItem("looks_hub_bookings") || 
+            localStorage.getItem("bookingIds") || 
+            "[]"
+          );
+          if (!currentIds.includes(booking._id)) {
+            currentIds.push(booking._id);
+            localStorage.setItem("looks_hub_bookings", JSON.stringify(currentIds));
+            localStorage.setItem("bookingIds", JSON.stringify(currentIds));
+          }
+
+          toast.success("Booking retrieved successfully");
+          setLookupReference("");
+          setLookupPhone("");
+        }
+      } else {
+        if (res.status === 400) {
+          setLookupError("Invalid booking reference");
+        } else if (res.status === 403) {
+          setLookupError("Phone number does not match booking");
+        } else if (res.status === 404) {
+          setLookupError("Booking not found");
+        } else {
+          setLookupError(resData.message || "Failed to lookup booking");
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      setLookupError("Something went wrong. Please try again.");
+    } finally {
+      setIsSearching(false);
+    }
   };
 
   const handleOpenReschedule = (booking: Booking) => {
@@ -666,19 +738,19 @@ function BookingsDashboard() {
                     onClick={() => handleOpenReschedule(booking)}
                     disabled={(booking.rescheduleCount || 0) >= 2}
                     title={(booking.rescheduleCount || 0) >= 2 ? "Maximum reschedule limit reached. Please contact the salon directly." : undefined}
-                    className="px-4 py-2 border border-[color:var(--charcoal)]/15 rounded-full text-xs font-medium hover:border-[color:var(--gold)] hover:text-[color:var(--gold)] transition-all duration-300 disabled:opacity-40 disabled:hover:border-[color:var(--charcoal)]/15 disabled:hover:text-[color:var(--charcoal)]/65 disabled:cursor-not-allowed"
+                    className="px-4 py-2 border border-[color:var(--charcoal)]/15 rounded-full text-xs font-medium hover:border-[color:var(--gold)] hover:text-[color:var(--gold)] transition-all duration-300 disabled:opacity-40 disabled:hover:border-[color:var(--charcoal)]/15 disabled:hover:text-[color:var(--charcoal)]/65 disabled:cursor-not-allowed cursor-pointer"
                   >
                     Reschedule
                   </button>
                   <button
                     onClick={() => setCancelBooking(booking)}
-                    className="px-4 py-2 border border-red-500/20 text-red-500/80 rounded-full text-xs font-medium hover:bg-red-500/5 transition-all duration-300"
+                    className="px-4 py-2 border border-red-500/20 text-red-500/80 rounded-full text-xs font-medium hover:bg-red-500/5 transition-all duration-300 cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={() => triggerWhatsApp(booking)}
-                    className="p-2 bg-emerald-500/10 text-emerald-600 rounded-full hover:bg-emerald-500/20 transition-all duration-300"
+                    className="p-2 bg-emerald-500/10 text-emerald-600 rounded-full hover:bg-emerald-500/20 transition-all duration-300 cursor-pointer"
                     title="WhatsApp Support"
                   >
                     <MessageCircle size={16} />
@@ -688,7 +760,7 @@ function BookingsDashboard() {
                   <div className="relative">
                     <button
                       onClick={() => setCalendarMenuOpen(calendarMenuOpen === booking._id ? null : booking._id)}
-                      className="p-2.5 bg-[color:var(--charcoal)]/5 text-[color:var(--charcoal)]/75 rounded-full hover:bg-[color:var(--charcoal)]/10 hover:text-[color:var(--charcoal)] transition-all duration-300 flex items-center justify-center"
+                      className="p-2.5 bg-[color:var(--charcoal)]/5 text-[color:var(--charcoal)]/75 rounded-full hover:bg-[color:var(--charcoal)]/10 hover:text-[color:var(--charcoal)] transition-all duration-300 flex items-center justify-center cursor-pointer"
                       title="Add to Calendar"
                     >
                       <CalendarPlus size={16} />
@@ -742,7 +814,7 @@ function BookingsDashboard() {
                   {booking.status === "completed" && !booking.review && (
                     <button
                       onClick={() => setReviewBooking(booking)}
-                      className="px-4 py-2 bg-[color:var(--gold)]/10 text-[color:var(--gold)] hover:bg-[color:var(--gold)] hover:text-[color:var(--charcoal)] rounded-full text-xs font-semibold tracking-wider uppercase transition-all duration-300 flex items-center gap-1.5"
+                      className="px-4 py-2 bg-[color:var(--gold)]/10 text-[color:var(--gold)] hover:bg-[color:var(--gold)] hover:text-[color:var(--charcoal)] rounded-full text-xs font-semibold tracking-wider uppercase transition-all duration-300 flex items-center gap-1.5 cursor-pointer"
                     >
                       <Star size={13} fill="currentColor" /> Leave Review
                     </button>
@@ -756,7 +828,7 @@ function BookingsDashboard() {
 
                   <button
                     onClick={() => handleBookAgain(booking)}
-                    className="px-4 py-2 bg-[color:var(--charcoal)] text-[color:var(--cream)] rounded-full text-xs font-medium hover:bg-[color:var(--gold)] hover:text-[color:var(--charcoal)] transition-all duration-300"
+                    className="px-4 py-2 bg-[color:var(--charcoal)] text-[color:var(--cream)] rounded-full text-xs font-medium hover:bg-[color:var(--gold)] hover:text-[color:var(--charcoal)] transition-all duration-300 cursor-pointer"
                   >
                     Book Again
                   </button>
@@ -766,7 +838,7 @@ function BookingsDashboard() {
                       onClick={() => handleOpenReschedule(booking)}
                       disabled={(booking.rescheduleCount || 0) >= 2}
                       title={(booking.rescheduleCount || 0) >= 2 ? "Maximum reschedule limit reached. Please contact the salon directly." : undefined}
-                      className="px-4 py-2 border border-[color:var(--charcoal)]/15 rounded-full text-xs font-medium hover:border-[color:var(--gold)] hover:text-[color:var(--gold)] transition-all duration-300 disabled:opacity-40 disabled:hover:border-[color:var(--charcoal)]/15 disabled:hover:text-[color:var(--charcoal)]/65 disabled:cursor-not-allowed"
+                      className="px-4 py-2 border border-[color:var(--charcoal)]/15 rounded-full text-xs font-medium hover:border-[color:var(--gold)] hover:text-[color:var(--gold)] transition-all duration-300 disabled:opacity-40 disabled:hover:border-[color:var(--charcoal)]/15 disabled:hover:text-[color:var(--charcoal)]/65 disabled:cursor-not-allowed cursor-pointer"
                     >
                       Reschedule
                     </button>
@@ -810,8 +882,8 @@ function BookingsDashboard() {
         </div>
 
         <div className="container-luxe relative z-10 max-w-5xl">
-          <header className="mb-12 flex flex-col md:flex-row md:items-end justify-between gap-6">
-            <div>
+          <header className="mb-12 flex flex-col md:flex-row md:items-start justify-between gap-8">
+            <div className="flex-1">
               <p className="text-xs uppercase tracking-[0.28em] text-[color:var(--gold)] font-semibold flex items-center gap-3 mb-4">
                 <span className="w-8 h-[1px] bg-[color:var(--gold)] inline-block" />
                 DASHBOARD
@@ -824,25 +896,44 @@ function BookingsDashboard() {
               </p>
             </div>
 
-            {/* Quick search form */}
-            <form onSubmit={handleSearchSubmit} className="flex items-center gap-2 max-w-sm w-full">
-              <div className="relative flex-1">
-                <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[color:var(--charcoal)]/40" />
-                <input
-                  type="text"
-                  placeholder="Lookup phone number..."
-                  value={phoneQuery}
-                  onChange={(e) => setPhoneQuery(e.target.value)}
-                  className="w-full bg-[color:var(--cream)] border border-[color:var(--charcoal)]/15 rounded-full pl-10 pr-4 py-2.5 text-xs focus:outline-none focus:border-[color:var(--gold)] focus:ring-1 focus:ring-[color:var(--gold)] transition-all font-light"
-                />
+            {/* Secure Booking Lookup Form */}
+            <form onSubmit={handleLookupSubmit} className="bg-[color:var(--cream)] border border-[color:var(--charcoal)]/10 rounded-[1.5rem] p-5 max-w-sm w-full shadow-[var(--shadow-soft)]">
+              <h3 className="font-display text-base font-semibold mb-3 text-[color:var(--charcoal)]">Find Your Booking</h3>
+              <div className="space-y-3">
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Booking Reference (e.g. LH-2026-00015)"
+                    value={lookupReference}
+                    onChange={(e) => setLookupReference(e.target.value)}
+                    className="w-full bg-[color:var(--cream)] border border-[color:var(--charcoal)]/15 rounded-full px-4 py-2.5 text-xs focus:outline-none focus:border-[color:var(--gold)] focus:ring-1 focus:ring-[color:var(--gold)] transition-all font-light uppercase"
+                  />
+                </div>
+                <div className="relative">
+                  <input
+                    type="tel"
+                    placeholder="Phone Number (e.g. 9516350602)"
+                    value={lookupPhone}
+                    onChange={(e) => setLookupPhone(e.target.value.replace(/[^\d+]/g, ""))}
+                    className="w-full bg-[color:var(--cream)] border border-[color:var(--charcoal)]/15 rounded-full px-4 py-2.5 text-xs focus:outline-none focus:border-[color:var(--gold)] focus:ring-1 focus:ring-[color:var(--gold)] transition-all font-light"
+                  />
+                </div>
+                
+                {lookupError && (
+                  <div className="text-red-500 text-[10px] font-medium flex items-center gap-1.5 px-2">
+                    <AlertCircle size={12} className="shrink-0" />
+                    <span>{lookupError}</span>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={isSearching}
+                  className="w-full py-2.5 bg-[color:var(--charcoal)] text-[color:var(--cream)] rounded-full text-xs font-semibold uppercase tracking-wider hover:bg-[color:var(--gold)] hover:text-[color:var(--charcoal)] disabled:opacity-40 transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {isSearching ? <Loader2 size={12} className="animate-spin" /> : "Find Booking"}
+                </button>
               </div>
-              <button
-                type="submit"
-                disabled={isSearching}
-                className="px-5 py-2.5 bg-[color:var(--charcoal)] text-[color:var(--cream)] rounded-full text-xs font-medium hover:bg-[color:var(--gold)] hover:text-[color:var(--charcoal)] transition-all duration-300 flex items-center gap-1.5"
-              >
-                {isSearching ? <Loader2 size={12} className="animate-spin" /> : "Search"}
-              </button>
             </form>
           </header>
 
@@ -893,7 +984,7 @@ function BookingsDashboard() {
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
-                  className={`px-8 py-4 text-xs font-semibold uppercase tracking-[0.2em] relative transition-colors ${isActive ? "text-[color:var(--charcoal)]" : "text-[color:var(--charcoal)]/40 hover:text-[color:var(--charcoal)]/70"}`}
+                  className={`px-4 sm:px-8 py-3 sm:py-4 text-[10px] sm:text-xs font-semibold uppercase tracking-[0.1em] sm:tracking-[0.2em] relative transition-colors flex-1 sm:flex-none text-center cursor-pointer ${isActive ? "text-[color:var(--charcoal)]" : "text-[color:var(--charcoal)]/40 hover:text-[color:var(--charcoal)]/70"}`}
                 >
                   {tab === "upcoming" ? `Upcoming Appointments (${loading ? "0" : upcomingCount})` : `History (${loading ? "0" : historyBookings.length})`}
                   {isActive && (

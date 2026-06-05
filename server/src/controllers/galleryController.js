@@ -6,7 +6,7 @@ import { sendSuccess, sendError } from '../utils/responseHandler.js'
 // @route   GET /api/gallery
 // @access  Public
 export const getGalleryItems = asyncHandler(async (req, res) => {
-  const items = await Gallery.find({}).sort({ createdAt: -1 })
+  const items = await Gallery.find({}).sort({ createdAt: -1 }).lean()
   sendSuccess(res, items, 'Gallery items retrieved successfully')
 })
 

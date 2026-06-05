@@ -43,5 +43,7 @@ const artistSchema = new mongoose.Schema({
   timestamps: true
 })
 
+artistSchema.index({ name: 1 })
+
 const Artist = mongoose.model('Artist', artistSchema)
 export default Artist

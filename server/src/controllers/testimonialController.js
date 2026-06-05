@@ -6,7 +6,7 @@ import { sendSuccess, sendError } from '../utils/responseHandler.js'
 // @route   GET /api/testimonials
 // @access  Public
 export const getTestimonials = asyncHandler(async (req, res) => {
-  const testimonials = await Testimonial.find({}).sort({ createdAt: -1 })
+  const testimonials = await Testimonial.find({}).sort({ createdAt: -1 }).lean()
   sendSuccess(res, testimonials, 'Testimonials retrieved successfully')
 })
 
