@@ -299,7 +299,7 @@ const formatDateTime = (dateStr: string, timeStr: string) => {
     if (timeStr.includes(':')) {
       const [hours, minutes] = timeStr.split(':').map(Number);
       const ampm = hours >= 12 ? 'PM' : 'AM';
-      const formattedHours = hours % 12 || 12;
+    const formattedHours = hours % 12 || 12;
       timeFormatted = `${formattedHours}:${minutes.toString().padStart(2, '0')} ${ampm}`;
     }
     return `${dateFormatted} at ${timeFormatted}`;
@@ -310,14 +310,13 @@ const formatDateTime = (dateStr: string, timeStr: string) => {
 
 function BookingsDashboard() {
   const navigate = useNavigate();
-  const [lookupReference, setLookupReference] = useState("");
+  const [lookupName, setLookupName] = useState("");
   const [lookupPhone, setLookupPhone] = useState("");
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState(false);
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"upcoming" | "history">("upcoming");
-  
+  const [searchedBookings, setSearchedBookings] = useState<Booking[]>([]);
+  const [hasSearched, setHasSearched] = useState(false);
+
   // Modals state
   const [rescheduleBooking, setRescheduleBooking] = useState<Booking | null>(null);
   const [newDate, setNewDate] = useState("");
@@ -337,80 +336,15 @@ function BookingsDashboard() {
 
   const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
-  const fetchBookings = async () => {
-    setLoading(true);
-    try {
-      let fetchedBookings: Booking[] = [];
-
-      // Merge with localStorage booking IDs if they exist in either looks_hub_bookings or bookingIds
-      const localBookingIds = JSON.parse(
-        localStorage.getItem("looks_hub_bookings") || 
-        localStorage.getItem("bookingIds") || 
-        "[]"
-      );
-
-      if (localBookingIds.length > 0) {
-        const validLocalBookingIds = [...localBookingIds];
-        let wasModified = false;
-
-        for (const id of localBookingIds) {
-          try {
-            const res = await fetch(`${apiUrl}/bookings/${id}`);
-            if (res.ok) {
-              const data = await res.json();
-              if (data.success && data.data) {
-                fetchedBookings.push(data.data);
-              }
-            } else if (res.status === 404) {
-              // Remove invalid/deleted booking from local storage
-              const idx = validLocalBookingIds.indexOf(id);
-              if (idx > -1) {
-                validLocalBookingIds.splice(idx, 1);
-                wasModified = true;
-              }
-            }
-          } catch (err) {
-            console.error(`Failed to fetch individual booking ${id}:`, err);
-          }
-        }
-
-        if (wasModified) {
-          localStorage.setItem("looks_hub_bookings", JSON.stringify(validLocalBookingIds));
-          localStorage.setItem("bookingIds", JSON.stringify(validLocalBookingIds));
-        }
-      }
-
-      // Sort combined list descending
-      fetchedBookings.sort((a, b) => new Date(`${b.date}T${b.time}`).getTime() - new Date(`${a.date}T${a.time}`).getTime());
-      
-      setBookings(fetchedBookings);
-    } catch (err: any) {
-      console.error(err);
-      toast.error(err.message || "Something went wrong fetching bookings.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchBookings();
-  }, []);
-
   const handleLookupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLookupError(null);
 
-    const refVal = lookupReference.trim();
+    const nameVal = lookupName.trim();
     const phoneVal = lookupPhone.trim();
 
-    if (!refVal) {
-      setLookupError("Booking reference is required");
-      return;
-    }
-
-    // Reference validation format LH-YYYY-XXXXX
-    if (!/^LH-\d{4}-\d{5}$/i.test(refVal)) {
-      setLookupError("Invalid booking reference");
+    if (!nameVal) {
+      setLookupError("Customer name is required");
       return;
     }
 
@@ -424,55 +358,30 @@ function BookingsDashboard() {
       const res = await fetch(`${apiUrl}/bookings/lookup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reference: refVal, phone: phoneVal })
+        body: JSON.stringify({ customerName: nameVal, phone: phoneVal })
       });
 
       const resData = await res.json();
 
       if (res.ok) {
         if (resData.success && resData.data) {
-          const booking = resData.data;
-
-          // Merge booking into local state if not already there
-          setBookings((prev) => {
-            if (prev.some((b) => b._id === booking._id)) {
-              return prev;
-            }
-            const updated = [booking, ...prev];
-            updated.sort((a, b) => new Date(`${b.date}T${b.time}`).getTime() - new Date(`${a.date}T${a.time}`).getTime());
-            return updated;
-          });
-
-          // Store in both localStorage keys
-          const currentIds = JSON.parse(
-            localStorage.getItem("looks_hub_bookings") || 
-            localStorage.getItem("bookingIds") || 
-            "[]"
-          );
-          if (!currentIds.includes(booking._id)) {
-            currentIds.push(booking._id);
-            localStorage.setItem("looks_hub_bookings", JSON.stringify(currentIds));
-            localStorage.setItem("bookingIds", JSON.stringify(currentIds));
-          }
-
-          toast.success("Booking retrieved successfully");
-          setLookupReference("");
-          setLookupPhone("");
+          setSearchedBookings(resData.data);
+          setHasSearched(true);
+          toast.success(`Found ${resData.data.length} appointments`);
         }
       } else {
-        if (res.status === 400) {
-          setLookupError("Invalid booking reference");
-        } else if (res.status === 403) {
-          setLookupError("Phone number does not match booking");
+        setSearchedBookings([]);
+        if (res.status === 429) {
+          setLookupError("Too many lookup attempts. Please try again after a minute.");
         } else if (res.status === 404) {
-          setLookupError("Booking not found");
+          setHasSearched(true);
         } else {
-          setLookupError(resData.message || "Failed to lookup booking");
+          setLookupError("Please verify your name and phone number.");
         }
       }
     } catch (err) {
       console.error(err);
-      setLookupError("Something went wrong. Please try again.");
+      setLookupError("Please verify your name and phone number.");
     } finally {
       setIsSearching(false);
     }
@@ -522,7 +431,9 @@ function BookingsDashboard() {
       
       toast.success("Appointment rescheduled successfully.");
       setRescheduleBooking(null);
-      fetchBookings();
+      if (data.data) {
+        setSearchedBookings(prev => prev.map(b => b._id === data.data._id ? data.data : b));
+      }
     } catch (err: any) {
       toast.error(err.message);
     } finally {
@@ -544,7 +455,9 @@ function BookingsDashboard() {
 
       toast.success("Appointment cancelled successfully");
       setCancelBooking(null);
-      fetchBookings();
+      if (data.data) {
+        setSearchedBookings(prev => prev.map(b => b._id === data.data._id ? data.data : b));
+      }
     } catch (err: any) {
       toast.error(err.message);
     } finally {
@@ -572,7 +485,9 @@ function BookingsDashboard() {
       setReviewBooking(null);
       setRating(5);
       setFeedback("");
-      fetchBookings();
+      if (data.data) {
+        setSearchedBookings(prev => prev.map(b => b._id === data.data._id ? data.data : b));
+      }
     } catch (err: any) {
       toast.error(err.message);
     } finally {
@@ -600,7 +515,6 @@ function BookingsDashboard() {
   // Calendar Link Generators
   const getGoogleCalendarUrl = (booking: Booking) => {
     const startStr = `${booking.date.replace(/-/g, "")}T${booking.time.replace(":", "")}00Z`;
-    // Add 1 hour duration as fallback
     const durationMin = booking.duration ? parseInt(booking.duration) : 60;
     const endHour = parseInt(booking.time.split(":")[0]) + Math.floor(durationMin / 60);
     const endMin = parseInt(booking.time.split(":")[1]) + (durationMin % 60);
@@ -638,23 +552,15 @@ function BookingsDashboard() {
     document.body.removeChild(link);
   };
 
-  // Filter bookings
-  const upcomingBookings = bookings.filter(b => b.status === "pending" || b.status === "confirmed");
-  const historyBookings = bookings.filter(b => b.status === "completed" || b.status === "cancelled");
-
-  const totalBookings = bookings.length;
-  const upcomingCount = upcomingBookings.length;
-  const completedCount = bookings.filter(b => b.status === "completed").length;
-
-  const nowVal = new Date();
-  const thirtyDaysAgo = new Date(nowVal.getTime() - 30 * 24 * 60 * 60 * 1000);
-  
-  const recentHistory = historyBookings.filter(b => new Date(b.date).getTime() >= thirtyDaysAgo.getTime());
-  const olderHistory = historyBookings.filter(b => new Date(b.date).getTime() < thirtyDaysAgo.getTime());
-
-  const currentList = activeTab === "upcoming" ? upcomingBookings : historyBookings;
-
-  const renderBookingCard = (booking: Booking, idx: number, isUpcoming: boolean) => {
+  const renderBookingCard = (booking: Booking, idx: number) => {
+    const isUpcoming = booking.status === "pending" || booking.status === "confirmed";
+    
+    // Check 4 hours notice
+    const appointmentTime = new Date(`${booking.date}T${booking.time}`);
+    const now = new Date();
+    const diffHours = (appointmentTime.getTime() - now.getTime()) / (1000 * 60 * 60);
+    const isLessThan4Hours = diffHours < 4;
+    
     return (
       <motion.div
         key={booking._id}
@@ -675,7 +581,7 @@ function BookingsDashboard() {
               />
             </div>
             <div>
-              {/* 7. PROFESSIONAL BOOKING REFERENCE */}
+              {/* Booking Reference */}
               <div className="text-[10px] text-[color:var(--charcoal)]/40 font-mono tracking-wider mb-1 flex items-center gap-1.5">
                 <span className="uppercase font-medium">Ref:</span>
                 <span className="font-bold text-[color:var(--charcoal)]/70">{booking.reference || booking._id.substring(0, 8).toUpperCase()}</span>
@@ -685,7 +591,6 @@ function BookingsDashboard() {
                 <h3 className="font-display text-xl md:text-2xl font-light text-[color:var(--charcoal)]">
                   {booking.service}
                 </h3>
-                {/* 3. CUSTOMER FRIENDLY STATUS LABELS & 9. STATUS ICONS */}
                 <span className={`text-[9px] uppercase tracking-wider font-semibold px-2.5 py-1 rounded-full flex items-center gap-1.5 ${
                   booking.status === "confirmed" ? "bg-emerald-500/10 text-emerald-600" :
                   booking.status === "pending" ? "bg-amber-500/10 text-amber-600" :
@@ -708,7 +613,7 @@ function BookingsDashboard() {
                 </span>
                 <span className="flex items-center gap-2">
                   <Clock size={13} className="text-[color:var(--gold)]" />
-                  Duration: {booking.duration || "45 Min"}
+                  Duration: {booking.duration || "60 Min"}
                 </span>
                 <span className="flex items-center gap-2">
                   <DollarSign size={13} className="text-[color:var(--gold)]" />
@@ -720,7 +625,6 @@ function BookingsDashboard() {
 
           {/* Booking Card Actions */}
           <div className="flex flex-col items-end gap-2 shrink-0 border-t border-[color:var(--charcoal)]/5 pt-4 md:pt-0 md:border-0 w-full md:w-auto">
-            {/* 5. RESCHEDULE REMAINING COUNTER */}
             {isUpcoming && (
               <motion.div
                 initial={{ opacity: 0 }}
@@ -736,8 +640,13 @@ function BookingsDashboard() {
                 <>
                   <button
                     onClick={() => handleOpenReschedule(booking)}
-                    disabled={(booking.rescheduleCount || 0) >= 2}
-                    title={(booking.rescheduleCount || 0) >= 2 ? "Maximum reschedule limit reached. Please contact the salon directly." : undefined}
+                    disabled={(booking.rescheduleCount || 0) >= 2 || isLessThan4Hours}
+                    title={(booking.rescheduleCount || 0) >= 2 
+                      ? "Maximum reschedule limit reached. Please contact the salon directly." 
+                      : isLessThan4Hours 
+                        ? "Appointments can only be rescheduled at least 4 hours before the scheduled time."
+                        : undefined
+                    }
                     className="px-4 py-2 border border-[color:var(--charcoal)]/15 rounded-full text-xs font-medium hover:border-[color:var(--gold)] hover:text-[color:var(--gold)] transition-all duration-300 disabled:opacity-40 disabled:hover:border-[color:var(--charcoal)]/15 disabled:hover:text-[color:var(--charcoal)]/65 disabled:cursor-not-allowed cursor-pointer"
                   >
                     Reschedule
@@ -849,18 +758,18 @@ function BookingsDashboard() {
           </div>
         </div>
 
-        {/* 1. PREMIUM VISUAL JOURNEY TRACKER */}
+        {/* Visual Journey Tracker */}
         <VisualJourneyTracker status={booking.status} />
 
-        {/* 6. LIVE APPOINTMENT COUNTDOWN */}
+        {/* Live Countdown */}
         {booking.status === "confirmed" && (
           <AppointmentCountdown dateStr={booking.date} timeStr={booking.time} />
         )}
 
-        {/* 4. STATUS INFORMATION CARDS */}
+        {/* Status Info Card */}
         <StatusInfoCard status={booking.status} />
 
-        {/* 2. STATUS HISTORY TIMELINE */}
+        {/* Status History Timeline */}
         {booking.statusHistory && booking.statusHistory.length > 0 && (
           <Timeline history={booking.statusHistory} />
         )}
@@ -881,204 +790,143 @@ function BookingsDashboard() {
           }} />
         </div>
 
-        <div className="container-luxe relative z-10 max-w-5xl">
-          <header className="mb-12 flex flex-col md:flex-row md:items-start justify-between gap-8">
-            <div className="flex-1">
-              <p className="text-xs uppercase tracking-[0.28em] text-[color:var(--gold)] font-semibold flex items-center gap-3 mb-4">
-                <span className="w-8 h-[1px] bg-[color:var(--gold)] inline-block" />
-                DASHBOARD
-              </p>
-              <h1 className="font-display text-4xl md:text-5xl font-light tracking-tight text-[color:var(--charcoal)]">
-                My Appointments
-              </h1>
-              <p className="text-sm text-[color:var(--charcoal)]/60 mt-2 font-light">
-                Manage, reschedule, or review your premium salon experiences.
+        <div className="container-luxe relative z-10 max-w-2xl mx-auto px-4">
+          {isSearching ? (
+            // Loading State
+            <div className="text-center py-20 space-y-4">
+              <Loader2 size={36} className="animate-spin text-[color:var(--gold)] mx-auto" />
+              <p className="text-sm font-light text-[color:var(--charcoal)]/60">
+                Finding your appointments...
               </p>
             </div>
-
-            {/* Secure Booking Lookup Form */}
-            <form onSubmit={handleLookupSubmit} className="bg-[color:var(--cream)] border border-[color:var(--charcoal)]/10 rounded-[1.5rem] p-5 max-w-sm w-full shadow-[var(--shadow-soft)]">
-              <h3 className="font-display text-base font-semibold mb-3 text-[color:var(--charcoal)]">Find Your Booking</h3>
-              <div className="space-y-3">
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="Booking Reference (e.g. LH-2026-00015)"
-                    value={lookupReference}
-                    onChange={(e) => setLookupReference(e.target.value)}
-                    className="w-full bg-[color:var(--cream)] border border-[color:var(--charcoal)]/15 rounded-full px-4 py-2.5 text-xs focus:outline-none focus:border-[color:var(--gold)] focus:ring-1 focus:ring-[color:var(--gold)] transition-all font-light uppercase"
-                  />
-                </div>
-                <div className="relative">
-                  <input
-                    type="tel"
-                    placeholder="Phone Number (e.g. 9516350602)"
-                    value={lookupPhone}
-                    onChange={(e) => setLookupPhone(e.target.value.replace(/[^\d+]/g, ""))}
-                    className="w-full bg-[color:var(--cream)] border border-[color:var(--charcoal)]/15 rounded-full px-4 py-2.5 text-xs focus:outline-none focus:border-[color:var(--gold)] focus:ring-1 focus:ring-[color:var(--gold)] transition-all font-light"
-                  />
-                </div>
-                
-                {lookupError && (
-                  <div className="text-red-500 text-[10px] font-medium flex items-center gap-1.5 px-2">
-                    <AlertCircle size={12} className="shrink-0" />
-                    <span>{lookupError}</span>
-                  </div>
-                )}
-
-                <button
-                  type="submit"
-                  disabled={isSearching}
-                  className="w-full py-2.5 bg-[color:var(--charcoal)] text-[color:var(--cream)] rounded-full text-xs font-semibold uppercase tracking-wider hover:bg-[color:var(--gold)] hover:text-[color:var(--charcoal)] disabled:opacity-40 transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  {isSearching ? <Loader2 size={12} className="animate-spin" /> : "Find Booking"}
-                </button>
-              </div>
-            </form>
-          </header>
-
-          {/* Stats Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-12">
-            {[
-              { label: "Total Bookings", val: loading ? "..." : totalBookings, icon: <BookOpen className="text-[color:var(--gold)]" size={20} /> },
-              { 
-                label: "Active Appointments", 
-                val: loading ? "..." : `${upcomingCount} / 3`, 
-                icon: <Calendar className="text-[color:var(--gold)]" size={20} />,
-                badge: upcomingCount >= 3 ? "Maximum active booking limit reached." : null
-              },
-              { label: "Completed Journeys", val: loading ? "..." : completedCount, icon: <CheckCircle className="text-[color:var(--gold)]" size={20} /> }
-            ].map((stat, i) => (
-              <motion.div
-                key={stat.label}
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: i * 0.1 }}
-                className="bg-[color:var(--cream)] border border-[color:var(--charcoal)]/10 rounded-2xl p-6 flex items-center justify-between shadow-[var(--shadow-soft)] hover:border-[color:var(--gold)]/30 transition-all duration-300"
-              >
-                <div>
-                  <span className="text-[10px] uppercase tracking-widest text-[color:var(--charcoal)]/50 block font-semibold mb-1">
-                    {stat.label}
-                  </span>
-                  <span className="text-3xl font-display font-light text-[color:var(--charcoal)] block">
-                    {stat.val}
-                  </span>
-                  {stat.badge && (
-                    <span className="mt-2 inline-block text-[9px] uppercase tracking-wider bg-red-500/10 text-red-600 font-semibold px-2.5 py-0.5 rounded-full">
-                      {stat.badge}
-                    </span>
-                  )}
-                </div>
-                <div className="p-3 bg-[color:var(--charcoal)]/5 rounded-xl">
-                  {stat.icon}
-                </div>
-              </motion.div>
-            ))}
-          </div>
-
-          {/* Tabs Navigation */}
-          <div className="flex border-b border-[color:var(--charcoal)]/10 mb-8 relative">
-            {(["upcoming", "history"] as const).map((tab) => {
-              const isActive = activeTab === tab;
-              return (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`px-4 sm:px-8 py-3 sm:py-4 text-[10px] sm:text-xs font-semibold uppercase tracking-[0.1em] sm:tracking-[0.2em] relative transition-colors flex-1 sm:flex-none text-center cursor-pointer ${isActive ? "text-[color:var(--charcoal)]" : "text-[color:var(--charcoal)]/40 hover:text-[color:var(--charcoal)]/70"}`}
-                >
-                  {tab === "upcoming" ? `Upcoming Appointments (${loading ? "0" : upcomingCount})` : `History (${loading ? "0" : historyBookings.length})`}
-                  {isActive && (
-                    <motion.div
-                      layoutId="activeTabUnderline"
-                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-[color:var(--gold)]"
-                      transition={{ type: "spring", stiffness: 380, damping: 30 }}
-                    />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Booking Cards / List */}
-          <div className="space-y-6">
-            {loading ? (
-              // Skeleton loading states
-              Array.from({ length: 2 }).map((_, idx) => (
-                <div key={idx} className="bg-[color:var(--cream)] border border-[color:var(--charcoal)]/10 rounded-3xl p-6 md:p-8 animate-pulse flex flex-col md:flex-row gap-6 items-center">
-                  <div className="w-24 h-24 bg-[color:var(--charcoal)]/5 rounded-2xl shrink-0" />
-                  <div className="flex-1 space-y-3 w-full">
-                    <div className="h-6 bg-[color:var(--charcoal)]/5 rounded w-1/3" />
-                    <div className="h-4 bg-[color:var(--charcoal)]/5 rounded w-1/4" />
-                    <div className="h-4 bg-[color:var(--charcoal)]/5 rounded w-1/2" />
-                  </div>
-                  <div className="h-10 bg-[color:var(--charcoal)]/5 rounded-full w-28 shrink-0" />
-                </div>
-              ))
-            ) : currentList.length === 0 ? (
-              // Elegant Empty State
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="bg-secondary/10 border border-[color:var(--charcoal)]/10 rounded-3xl p-12 text-center max-w-xl mx-auto my-12"
-              >
-                <div className="w-16 h-16 rounded-full bg-[color:var(--charcoal)]/5 flex items-center justify-center mx-auto mb-6 text-[color:var(--gold)]">
-                  {activeTab === "upcoming" ? <Calendar size={28} /> : <RotateCcw size={28} />}
-                </div>
-                <h3 className="font-display text-2xl mb-3 text-[color:var(--charcoal)]">
-                  {activeTab === "upcoming" ? "No Upcoming Visits" : "No Booking History"}
-                </h3>
-                <p className="text-sm text-[color:var(--charcoal)]/60 font-light max-w-md mx-auto mb-8 leading-relaxed">
-                  {activeTab === "upcoming"
-                    ? "Your luxury grooming rituals await. Book your appointment now with one of our elite salon artisans."
-                    : "You haven't completed any grooming rituals yet. Experience Looks Hub's fine hospitality today."}
+          ) : !hasSearched ? (
+            // Empty / Initial Lookup State
+            <div className="space-y-8">
+              <div className="text-center">
+                <p className="text-xs uppercase tracking-[0.28em] text-[color:var(--gold)] font-semibold flex items-center justify-center gap-3 mb-4">
+                  <span className="w-8 h-[1px] bg-[color:var(--gold)] inline-block" />
+                  PORTAL
                 </p>
-                <Link
-                  to="/book"
-                  className="inline-flex items-center justify-center gap-2 px-8 py-3.5 bg-[color:var(--charcoal)] text-[color:var(--cream)] rounded-full text-xs font-semibold tracking-wider uppercase hover:bg-[color:var(--gold)] hover:text-[color:var(--charcoal)] transition-all duration-300 shadow-soft"
-                >
-                  Schedule Appointment <ArrowRight size={14} />
-                </Link>
-              </motion.div>
-            ) : activeTab === "upcoming" ? (
-              <div className="space-y-6">
-                {upcomingBookings.map((booking, idx) => renderBookingCard(booking, idx, true))}
+                <h1 className="font-display text-4xl md:text-5xl font-light tracking-tight text-[color:var(--charcoal)]">
+                  Booking Lookup
+                </h1>
+                <p className="text-sm text-[color:var(--charcoal)]/60 mt-3 font-light max-w-md mx-auto leading-relaxed">
+                  To view details, reschedule, or cancel your appointment, please enter your details below.
+                </p>
               </div>
-            ) : (
-              <div className="space-y-12">
-                {recentHistory.length === 0 && olderHistory.length === 0 ? (
-                  <div className="text-center text-[color:var(--charcoal)]/50 py-8 font-light text-sm">
-                    No booking history found.
+
+              {/* Secure Booking Lookup Form */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5 }}
+                className="bg-[color:var(--cream)] border border-[color:var(--charcoal)]/10 rounded-[2rem] p-8 md:p-10 shadow-[var(--shadow-soft)] max-w-md mx-auto"
+              >
+                <form onSubmit={handleLookupSubmit} className="space-y-5">
+                  <div>
+                    <label className="text-[10px] uppercase tracking-widest text-[color:var(--charcoal)]/50 block font-semibold mb-2">
+                      Customer Name
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="e.g. Sachin Singh"
+                        value={lookupName}
+                        onChange={(e) => setLookupName(e.target.value)}
+                        className="w-full bg-[color:var(--cream)] border border-[color:var(--charcoal)]/15 rounded-full px-5 py-3 text-xs focus:outline-none focus:border-[color:var(--gold)] focus:ring-1 focus:ring-[color:var(--gold)] transition-all font-light"
+                      />
+                    </div>
                   </div>
-                ) : (
-                  <>
-                    {recentHistory.length > 0 && (
-                      <div>
-                        <h3 className="text-xs uppercase tracking-[0.2em] text-[color:var(--gold)] font-semibold mb-6 flex items-center gap-3">
-                          <span className="w-8 h-[1.5px] bg-[color:var(--gold)] inline-block" />
-                          Recent Visits (Last 30 Days)
-                        </h3>
-                        <div className="space-y-6">
-                          {recentHistory.map((booking, idx) => renderBookingCard(booking, idx, false))}
-                        </div>
-                      </div>
-                    )}
-                    
-                    {olderHistory.length > 0 && (
-                      <div>
-                        <h3 className="text-xs uppercase tracking-[0.2em] text-[color:var(--charcoal)]/40 font-semibold mb-6 flex items-center gap-3">
-                          <span className="w-8 h-[1.5px] bg-[color:var(--charcoal)]/30 inline-block" />
-                          Older Visits
-                        </h3>
-                        <div className="space-y-6">
-                          {olderHistory.map((booking, idx) => renderBookingCard(booking, idx, false))}
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
+
+                  <div>
+                    <label className="text-[10px] uppercase tracking-widest text-[color:var(--charcoal)]/50 block font-semibold mb-2">
+                      Phone Number
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="tel"
+                        placeholder="e.g. 9516350602"
+                        value={lookupPhone}
+                        onChange={(e) => setLookupPhone(e.target.value.replace(/[^\d+]/g, ""))}
+                        className="w-full bg-[color:var(--cream)] border border-[color:var(--charcoal)]/15 rounded-full px-5 py-3 text-xs focus:outline-none focus:border-[color:var(--gold)] focus:ring-1 focus:ring-[color:var(--gold)] transition-all font-light"
+                      />
+                    </div>
+                  </div>
+
+                  {lookupError && (
+                    <div className="text-red-500 text-[11px] font-medium flex items-center gap-1.5 px-2">
+                      <AlertCircle size={13} className="shrink-0" />
+                      <span>{lookupError}</span>
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    className="w-full py-3.5 bg-[color:var(--charcoal)] text-[color:var(--cream)] rounded-full text-xs font-semibold uppercase tracking-wider hover:bg-[color:var(--gold)] hover:text-[color:var(--charcoal)] transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer mt-2"
+                  >
+                    Find My Bookings
+                  </button>
+                </form>
+              </motion.div>
+            </div>
+          ) : (
+            // Booking Details State
+            <div className="space-y-8">
+              <div className="text-center">
+                <p className="text-xs uppercase tracking-[0.28em] text-[color:var(--gold)] font-semibold flex items-center justify-center gap-3 mb-4">
+                  <span className="w-8 h-[1px] bg-[color:var(--gold)] inline-block" />
+                  APPOINTMENT DETAILS
+                </p>
+                <h1 className="font-display text-3xl md:text-4xl font-light tracking-tight text-[color:var(--charcoal)]">
+                  {searchedBookings.length === 0 ? "No Appointments Found" : `Found ${searchedBookings.length} Appointment${searchedBookings.length === 1 ? "" : "s"}`}
+                </h1>
               </div>
-            )}
-          </div>
+
+              {searchedBookings.length === 0 ? (
+                // Empty State
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="bg-secondary/10 border border-[color:var(--charcoal)]/10 rounded-3xl p-12 text-center max-w-xl mx-auto my-12"
+                >
+                  <div className="w-16 h-16 rounded-full bg-[color:var(--charcoal)]/5 flex items-center justify-center mx-auto mb-6 text-[color:var(--gold)]">
+                    <Calendar size={28} />
+                  </div>
+                  <h3 className="font-display text-2xl mb-3 text-[color:var(--charcoal)]">
+                    No Appointments Found
+                  </h3>
+                  <p className="text-sm text-[color:var(--charcoal)]/60 font-light max-w-md mx-auto mb-8 leading-relaxed">
+                    No appointments found for this name and phone number.
+                  </p>
+                  <button
+                    onClick={() => {
+                      setHasSearched(false);
+                      setLookupError(null);
+                    }}
+                    className="inline-flex items-center justify-center gap-2 px-8 py-3.5 bg-[color:var(--charcoal)] text-[color:var(--cream)] rounded-full text-xs font-semibold tracking-wider uppercase hover:bg-[color:var(--gold)] hover:text-[color:var(--charcoal)] transition-all duration-300 shadow-soft"
+                  >
+                    Search Another Booking
+                  </button>
+                </motion.div>
+              ) : (
+                <div className="space-y-6">
+                  {searchedBookings.map((booking, idx) => renderBookingCard(booking, idx))}
+
+                  <div className="pt-6 text-center">
+                    <button
+                      onClick={() => {
+                        setHasSearched(false);
+                        setLookupError(null);
+                      }}
+                      className="px-8 py-3.5 bg-[color:var(--charcoal)] text-[color:var(--cream)] rounded-full text-xs font-semibold uppercase tracking-wider hover:bg-[color:var(--gold)] hover:text-[color:var(--charcoal)] transition-all duration-300 cursor-pointer"
+                    >
+                      Search Another Booking
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </main>
 

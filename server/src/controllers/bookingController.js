@@ -585,43 +585,33 @@ export const getAvailableSlots = asyncHandler(async (req, res) => {
   sendSuccess(res, availableSlots, 'Available slots retrieved successfully')
 })
 
-// @desc    Lookup a booking by reference and phone
+// @desc    Lookup bookings by customer name and phone
 // @route   POST /api/bookings/lookup
 // @access  Public
 export const lookupBooking = asyncHandler(async (req, res) => {
-  const { reference, phone } = req.body
+  const { customerName, phone } = req.body
 
-  if (!reference || !phone) {
-    return sendError(res, 'Booking reference and phone number are required', 400)
+  if (!customerName || !phone) {
+    return sendError(res, 'Customer name and phone number are required', 400)
   }
 
-  // Find booking by reference (exact case-insensitive match)
-  const booking = await Booking.findOne({ 
-    reference: { $regex: new RegExp(`^${reference.trim()}$`, 'i') } 
-  })
+  const normalizedName = customerName.trim()
+  const normalizedPhone = phone.trim()
 
-  if (!booking) {
-    return sendError(res, 'Booking not found', 404)
+  const bookings = await Booking.find({
+    customerName: { $regex: new RegExp(`^${normalizedName}$`, 'i') },
+    phone: normalizedPhone
+  }).sort({ date: -1, time: -1 })
+
+  if (!bookings || bookings.length === 0) {
+    return sendError(res, 'No appointments found for this name and phone number.', 404)
   }
 
-  // Normalize phone numbers for comparison
-  const normalize = (p) => p.replace(/(?!^\+)[^\d]/g, '').trim()
-  const dbPhone = normalize(booking.phone)
-  const inputPhone = normalize(phone)
-
-  // Verify phone matches (supporting full match or matching endsWith if at least 10 digits)
-  const match = dbPhone === inputPhone || 
-                (dbPhone.length >= 10 && inputPhone.length >= 10 && (dbPhone.endsWith(inputPhone) || inputPhone.endsWith(dbPhone)))
-
-  if (!match) {
-    return sendError(res, 'Phone number does not match booking', 403)
-  }
-
-  // Return booking object
+  // Return bookings array
   return res.status(200).json({
     success: true,
-    message: 'Booking retrieved successfully',
-    data: booking,
-    booking: booking
+    message: 'Bookings retrieved successfully',
+    data: bookings,
+    bookings: bookings
   })
 })

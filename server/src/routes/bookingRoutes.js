@@ -16,6 +16,7 @@ import {
 } from '../controllers/bookingController.js'
 import { protectAdmin } from '../middleware/authMiddleware.js'
 import { validate } from '../middleware/validateMiddleware.js'
+import { lookupRateLimiter } from '../middleware/rateLimitMiddleware.js'
 
 const router = express.Router()
 
@@ -56,10 +57,10 @@ router.get('/:id', getBookingById)
 // Secure Booking Lookup (Public)
 router.post(
   '/lookup',
+  lookupRateLimiter,
   [
-    body('reference')
-      .notEmpty().withMessage('Booking reference is required').trim()
-      .matches(/^LH-\d{4}-\d{5}$/i).withMessage('Booking reference format must be LH-YYYY-XXXXX'),
+    body('customerName')
+      .notEmpty().withMessage('Customer name is required').trim(),
     body('phone')
       .notEmpty().withMessage('Phone number is required').trim()
       .isLength({ min: 10, max: 15 }).withMessage('Phone number must be between 10 and 15 digits')
