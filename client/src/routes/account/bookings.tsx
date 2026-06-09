@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -9,6 +9,7 @@ import {
   CheckCircle,
   XCircle,
   AlertCircle,
+  AlertTriangle,
   Star,
   MessageCircle,
   CalendarPlus,
@@ -20,7 +21,11 @@ import {
   ArrowRight,
   Sparkles,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  UserX,
+  Ban,
+  RefreshCw,
+  Phone
 } from "lucide-react";
 import { Navbar } from "@/components/site/Navbar";
 import { Footer } from "@/components/site/Footer";
@@ -53,10 +58,12 @@ interface Booking {
   stylist?: string;
   price?: number;
   duration?: string;
+  durationMinutes?: number;
   date: string;
   time: string;
   notes?: string;
-  status: "pending" | "confirmed" | "completed" | "cancelled";
+  status: "pending" | "confirmed" | "completed" | "cancelled_by_user" | "cancelled_by_salon" | "rejected" | "expired" | "no_show";
+  _originalStatus?: string;
   createdAt: string;
   rescheduleCount?: number;
   review?: {
@@ -65,13 +72,107 @@ interface Booking {
   };
 }
 
+// ─── Configurable Business Rules (must match backend) ────────
+const ALLOW_CANCEL_UNTIL_HOURS = 1;
+const ALLOW_RESCHEDULE_UNTIL_HOURS = 2;
+
+// ─── Centralized Remaining Time Utility ──────────────────────
+interface RemainingTime {
+  days: number;
+  hours: number;
+  minutes: number;
+  totalMinutes: number;
+  isExpired: boolean;
+  label: string;
+}
+
+const getRemainingTime = (dateStr: string, timeStr: string): RemainingTime => {
+  const target = new Date(`${dateStr}T${timeStr}:00+05:30`);
+  const now = new Date();
+  const diffMs = target.getTime() - now.getTime();
+
+  if (diffMs <= 0) {
+    return { days: 0, hours: 0, minutes: 0, totalMinutes: 0, isExpired: true, label: "" };
+  }
+
+  const totalMinutes = Math.floor(diffMs / (1000 * 60));
+  const days = Math.floor(totalMinutes / (24 * 60));
+  const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
+  const minutes = totalMinutes % 60;
+
+  const parts: string[] = [];
+  if (days > 0) parts.push(`${days}d`);
+  if (hours > 0) parts.push(`${hours}h`);
+  if (minutes > 0 || parts.length === 0) parts.push(`${minutes}m`);
+
+  return { days, hours, minutes, totalMinutes, isExpired: false, label: parts.join(" ") + " remaining" };
+};
+
+// Helper: check if a booking's appointment time is in the past
+const isAppointmentPast = (booking: Booking): boolean => {
+  const apptTime = new Date(`${booking.date}T${booking.time}:00+05:30`);
+  return apptTime.getTime() < Date.now();
+};
+
+// Helper: check if a booking status is "cancelled" (either variant)
+const isCancelledStatus = (status: string): boolean =>
+  status === "cancelled_by_user" || status === "cancelled_by_salon";
+
+// Helper: check if a booking can be cancelled (within cancellation window)
+const canCancelBooking = (booking: Booking): boolean => {
+  const isActive = booking.status === "pending" || booking.status === "confirmed";
+  if (!isActive) return false;
+  const remaining = getRemainingTime(booking.date, booking.time);
+  return !remaining.isExpired && (remaining.totalMinutes / 60) >= ALLOW_CANCEL_UNTIL_HOURS;
+};
+
+// Helper: check if a booking can be rescheduled (within reschedule window)
+const canRescheduleBooking = (booking: Booking): boolean => {
+  const isActive = booking.status === "pending" || booking.status === "confirmed";
+  if (!isActive) return false;
+  if ((booking.rescheduleCount || 0) >= 2) return false;
+  const remaining = getRemainingTime(booking.date, booking.time);
+  return !remaining.isExpired && (remaining.totalMinutes / 60) >= ALLOW_RESCHEDULE_UNTIL_HOURS;
+};
+
+// Helper: check if a booking can still be acted on (cancel or reschedule)
+const isActionable = (booking: Booking): boolean => {
+  const isActive = booking.status === "pending" || booking.status === "confirmed";
+  return isActive && !isAppointmentPast(booking);
+};
+
+// Helper: client-side status evaluator for real-time auto-expiry
+const evaluateClientStatus = (booking: Booking): Booking["status"] => {
+  const status = booking.status;
+  // Terminal statuses never change
+  if (status !== "pending" && status !== "confirmed") return status;
+
+  const remaining = getRemainingTime(booking.date, booking.time);
+  if (status === "pending" && remaining.isExpired) return "expired";
+  if (status === "confirmed" && remaining.isExpired) {
+    // Grace: check if service end time has also passed
+    const durationMins = booking.durationMinutes || 60;
+    const endRemaining = getRemainingTime(booking.date, booking.time);
+    if (endRemaining.totalMinutes + durationMins <= 0) return "no_show";
+    // More precise: compute from end time
+    const startMs = new Date(`${booking.date}T${booking.time}:00+05:30`).getTime();
+    const endMs = startMs + durationMins * 60 * 1000;
+    if (Date.now() > endMs) return "no_show";
+  }
+  return status;
+};
+
 // 3. CUSTOMER FRIENDLY STATUS LABELS
 const getFriendlyStatusLabel = (status: string) => {
   const mapping: Record<string, string> = {
-    pending: "Awaiting Salon Confirmation",
+    pending: "Awaiting Confirmation",
     confirmed: "Appointment Confirmed",
     completed: "Service Completed",
-    cancelled: "Appointment Cancelled"
+    cancelled_by_user: "Cancelled by You",
+    cancelled_by_salon: "Cancelled by Salon",
+    rejected: "Booking Rejected",
+    expired: "Booking Expired",
+    no_show: "Appointment Missed"
   };
   return mapping[status] || status;
 };
@@ -85,38 +186,84 @@ const StatusIcon = ({ status, size = 14 }: { status: string; size?: number }) =>
       return <CheckCircle size={size} className="text-emerald-500" />;
     case "completed":
       return <Sparkles size={size} className="text-[color:var(--gold)]" />;
-    case "cancelled":
+    case "cancelled_by_user":
+    case "cancelled_by_salon":
       return <XCircle size={size} className="text-red-500" />;
+    case "rejected":
+      return <Ban size={size} className="text-red-500" />;
+    case "expired":
+      return <AlertTriangle size={size} className="text-orange-500" />;
+    case "no_show":
+      return <UserX size={size} className="text-red-500" />;
     default:
       return null;
   }
 };
 
-// 1. PREMIUM VISUAL JOURNEY TRACKER
+// 1. DYNAMIC VISUAL JOURNEY TRACKER
 const VisualJourneyTracker = ({ status }: { status: string }) => {
-  const isCancelled = status === "cancelled";
-  
-  if (isCancelled) {
+  // Define steps based on actual booking lifecycle
+  const getSteps = () => {
+    if (isCancelledStatus(status)) {
+      return [
+        { label: "Booked", completed: true, failed: false },
+        { label: "Cancelled", completed: true, failed: true },
+      ];
+    }
+    if (status === "rejected") {
+      return [
+        { label: "Booked", completed: true, failed: false },
+        { label: "Rejected", completed: true, failed: true },
+      ];
+    }
+    if (status === "expired") {
+      return [
+        { label: "Booked", completed: true, failed: false },
+        { label: "Expired", completed: true, failed: true },
+      ];
+    }
+    if (status === "no_show") {
+      return [
+        { label: "Booked", completed: true, failed: false },
+        { label: "Confirmed", completed: true, failed: false },
+        { label: "Missed", completed: true, failed: true },
+      ];
+    }
+    // Normal flow: Booked → Pending → Completed
+    return [
+      { label: "Booked", completed: true, failed: false },
+      { label: status === "pending" ? "Pending" : "Confirmed", completed: status === "confirmed" || status === "completed", failed: false },
+      { label: "Completed", completed: status === "completed", failed: false },
+    ];
+  };
+
+  const steps = getSteps();
+  const hasFailed = steps.some(s => s.failed);
+
+  // For 2-step timelines (cancelled, rejected, expired)
+  if (steps.length === 2) {
     return (
       <div className="mt-6 pt-4 border-t border-[color:var(--charcoal)]/5 flex items-center gap-4">
         <div className="flex items-center gap-2 text-xs font-medium text-[color:var(--gold)]">
           <span className="w-5 h-5 rounded-full bg-[color:var(--gold)]/10 text-[color:var(--gold)] flex items-center justify-center text-[10px]">✓</span>
-          <span>Booked</span>
+          <span>{steps[0].label}</span>
         </div>
-        <div className="h-[2px] w-8 bg-red-500/20" />
-        <div className="flex items-center gap-2 text-xs font-semibold text-red-500">
-          <span className="w-5 h-5 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center text-[10px] font-bold">✕</span>
-          <span>Cancelled</span>
+        <div className={`h-[2px] w-8 ${steps[1].failed ? 'bg-red-500/20' : 'bg-[color:var(--gold)]/20'}`} />
+        <div className={`flex items-center gap-2 text-xs font-semibold ${steps[1].failed ? 'text-red-500' : 'text-[color:var(--gold)]'}`}>
+          <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+            steps[1].failed ? 'bg-red-500/10 text-red-500' : 'bg-[color:var(--gold)]/10 text-[color:var(--gold)]'
+          }`}>{steps[1].failed ? '✕' : '✓'}</span>
+          <span>{steps[1].label}</span>
         </div>
       </div>
     );
   }
 
-  const steps = [
-    { label: "Booked", completed: true, active: true },
-    { label: "Confirmed", completed: status === "confirmed" || status === "completed", active: status !== "pending" },
-    { label: "Completed", completed: status === "completed", active: status === "completed" }
-  ];
+  // For 3-step timelines
+  // Calculate progress width
+  const lastCompletedIdx = [...steps].reverse().findIndex(s => s.completed);
+  const completedUpTo = lastCompletedIdx >= 0 ? steps.length - 1 - lastCompletedIdx : -1;
+  const progressPercent = completedUpTo <= 0 ? "0%" : completedUpTo === 1 ? "33.33%" : "66.67%";
 
   return (
     <div className="mt-6 pt-4 border-t border-[color:var(--charcoal)]/5 w-full">
@@ -126,25 +273,28 @@ const VisualJourneyTracker = ({ status }: { status: string }) => {
         
         {/* Connecting line active fill */}
         <div
-          className="absolute top-[11px] left-[16.67%] h-[2.5px] bg-[color:var(--gold)] rounded-full transition-all duration-700 ease-out -z-0"
-          style={{
-            width: status === "completed" ? "66.67%" : status === "confirmed" ? "33.33%" : "0%"
-          }}
+          className={`absolute top-[11px] left-[16.67%] h-[2.5px] rounded-full transition-all duration-700 ease-out -z-0 ${
+            hasFailed ? 'bg-red-500' : 'bg-[color:var(--gold)]'
+          }`}
+          style={{ width: progressPercent }}
         />
 
-        {steps.map((stepVal, idx) => (
+        {steps.map((stepVal) => (
           <div key={stepVal.label} className="flex flex-col items-center flex-1 text-center relative z-10">
             <div
               className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold transition-all duration-500 ${
-                stepVal.completed 
-                  ? "bg-[color:var(--gold)] text-black shadow-sm" 
-                  : "border border-[color:var(--charcoal)]/20 text-[color:var(--charcoal)]/40 bg-[color:var(--cream)]"
+                stepVal.failed
+                  ? "bg-red-500 text-white shadow-sm"
+                  : stepVal.completed 
+                    ? "bg-[color:var(--gold)] text-black shadow-sm" 
+                    : "border border-[color:var(--charcoal)]/20 text-[color:var(--charcoal)]/40 bg-[color:var(--cream)]"
               }`}
             >
-              {stepVal.completed ? "✓" : "○"}
+              {stepVal.failed ? "✕" : stepVal.completed ? "✓" : "○"}
             </div>
             <span className={`text-[10px] sm:text-xs uppercase tracking-wider font-semibold mt-2 transition-colors duration-500 ${
-              stepVal.active ? "text-[color:var(--charcoal)]" : "text-[color:var(--charcoal)]/40"
+              stepVal.failed ? "text-red-500" :
+              stepVal.completed ? "text-[color:var(--charcoal)]" : "text-[color:var(--charcoal)]/40"
             }`}>
               {stepVal.label}
             </span>
@@ -156,19 +306,37 @@ const VisualJourneyTracker = ({ status }: { status: string }) => {
 };
 
 // 4. STATUS INFORMATION CARDS
-const StatusInfoCard = ({ status }: { status: string }) => {
+const StatusInfoCard = ({ status, booking }: { status: string; booking?: Booking }) => {
+  const isPendingAndClose = useMemo(() => {
+    if (status !== "pending" || !booking) return false;
+    const remaining = getRemainingTime(booking.date, booking.time);
+    return !remaining.isExpired && remaining.totalMinutes <= 60;
+  }, [status, booking]);
+
   const messages: Record<string, string> = {
-    pending: "Your booking request has been received. Our team will confirm it shortly.",
+    pending: isPendingAndClose 
+      ? "⚠️ Awaiting confirmation close to appointment time. Need a faster response? Contact the salon directly." 
+      : "Your booking request has been received. Salon must confirm before appointment time. Need a faster response? Contact the salon directly.",
     confirmed: "Your appointment has been confirmed. We look forward to welcoming you.",
-    completed: "Thank you for visiting Looks Hub. We'd love to hear your feedback.",
-    cancelled: "This appointment has been cancelled."
+    completed: "Thank you for visiting Look's Hub. We'd love to hear your feedback.",
+    cancelled_by_user: "You cancelled this appointment.",
+    cancelled_by_salon: "The salon cancelled this appointment. Please contact them for details.",
+    rejected: "The salon was unable to accommodate this booking request.",
+    expired: "This booking expired because the salon did not confirm before the appointment time.",
+    no_show: "The appointment time has passed and the booking was not marked as completed."
   };
   
   const styles: Record<string, string> = {
-    pending: "bg-amber-500/5 border-amber-500/10 text-amber-700/80",
+    pending: isPendingAndClose
+      ? "bg-red-500/5 border-red-500/20 text-red-600 font-medium animate-pulse"
+      : "bg-amber-500/5 border-amber-500/10 text-amber-700/80",
     confirmed: "bg-emerald-500/5 border-emerald-500/10 text-emerald-700/80",
     completed: "bg-[color:var(--gold-soft)]/10 border-[color:var(--gold)]/20 text-[color:var(--charcoal)]/80",
-    cancelled: "bg-red-500/5 border-red-500/10 text-red-700/80"
+    cancelled_by_user: "bg-red-500/5 border-red-500/10 text-red-700/80",
+    cancelled_by_salon: "bg-red-500/5 border-red-500/10 text-red-700/80",
+    rejected: "bg-red-500/5 border-red-500/10 text-red-700/80",
+    expired: "bg-orange-500/5 border-orange-500/10 text-orange-700/80",
+    no_show: "bg-red-500/5 border-red-500/10 text-red-700/80"
   };
   
   return (
@@ -179,48 +347,106 @@ const StatusInfoCard = ({ status }: { status: string }) => {
 };
 
 // 6. LIVE APPOINTMENT COUNTDOWN
-const AppointmentCountdown = ({ dateStr, timeStr }: { dateStr: string; timeStr: string }) => {
-  const [timeLeft, setTimeLeft] = useState<string | null>(null);
+const AppointmentCountdown = ({ dateStr, timeStr, status }: { dateStr: string; timeStr: string; status?: string }) => {
+  const [remaining, setRemaining] = useState<RemainingTime>(() => getRemainingTime(dateStr, timeStr));
 
   useEffect(() => {
-    const calculateTimeLeft = () => {
-      const now = new Date();
-      const targetStr = `${dateStr}T${timeStr}:00`;
-      const target = new Date(targetStr);
-      
-      const diffMs = target.getTime() - now.getTime();
-      if (diffMs <= 0) {
-        setTimeLeft(null);
-        return;
-      }
-      
-      const diffMins = Math.floor(diffMs / (1000 * 60));
-      const days = Math.floor(diffMins / (24 * 60));
-      const hours = Math.floor((diffMins % (24 * 60)) / 60);
-      const minutes = diffMins % 60;
-      
-      const parts = [];
-      if (days > 0) parts.push(`${days} Day${days > 1 ? "s" : ""}`);
-      if (hours > 0) parts.push(`${hours} Hour${hours > 1 ? "s" : ""}`);
-      if (minutes > 0 || parts.length === 0) parts.push(`${minutes} Minute${minutes > 1 ? "s" : ""}`);
-      
-      setTimeLeft(parts.join(", "));
-    };
-
-    calculateTimeLeft();
-    const interval = setInterval(calculateTimeLeft, 60000);
-
+    const tick = () => setRemaining(getRemainingTime(dateStr, timeStr));
+    tick();
+    const interval = setInterval(tick, 10000);
     return () => clearInterval(interval);
   }, [dateStr, timeStr]);
 
-  if (!timeLeft) return null;
+  if (remaining.isExpired || !remaining.label) return null;
+
+  // Urgency states
+  const totalHours = remaining.totalMinutes / 60;
+  const isWarning = status === "pending" && totalHours < 6;
+  const isCritical = status === "pending" && totalHours < 1;
+
+  const urgencyClass = isCritical
+    ? "bg-red-500/10 border-red-500/20"
+    : isWarning
+      ? "bg-amber-500/10 border-amber-500/20"
+      : "bg-[color:var(--gold-soft)]/20 border-[color:var(--gold)]/20";
+
+  const iconClass = isCritical
+    ? "text-red-500"
+    : isWarning
+      ? "text-amber-500"
+      : "text-[color:var(--gold)]";
+
+  const valueClass = isCritical
+    ? "text-red-500"
+    : isWarning
+      ? "text-amber-600"
+      : "text-[color:var(--gold)]";
+
+  const label = isCritical
+    ? "Urgent: Awaiting salon confirmation"
+    : isWarning
+      ? "Confirmation deadline approaching"
+      : status === "pending"
+        ? "Must be confirmed in:"
+        : "Appointment In:";
 
   return (
-    <div className="mt-4 p-3.5 bg-[color:var(--gold-soft)]/20 border border-[color:var(--gold)]/20 rounded-2xl flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 text-xs sm:text-sm">
+    <div className={`mt-4 p-3.5 ${urgencyClass} rounded-2xl flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 text-xs sm:text-sm`}>
       <span className="text-[color:var(--charcoal)]/60 font-light flex items-center gap-1.5 shrink-0">
-        <Clock size={13} className="text-[color:var(--gold)]" /> Appointment In:
+        <Clock size={13} className={iconClass} /> {label}
       </span>
-      <span className="font-semibold text-[color:var(--gold)] tracking-wide text-right">{timeLeft}</span>
+      <span className={`font-semibold ${valueClass} tracking-wide text-right`}>{remaining.label}</span>
+    </div>
+  );
+};
+
+// BOOKING AGE DISPLAY
+const BookingAge = ({ createdAt }: { createdAt: string }) => {
+  const created = new Date(createdAt);
+  const now = new Date();
+  const diffMs = now.getTime() - created.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  
+  let label: string;
+  if (diffDays === 0) label = "Requested today";
+  else if (diffDays === 1) label = "Requested yesterday";
+  else if (diffDays < 7) label = `Requested ${diffDays} days ago`;
+  else {
+    label = `Booked on ${created.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+  }
+  
+  return (
+    <span className="text-[10px] text-[color:var(--charcoal)]/40 font-light">
+      {label}
+    </span>
+  );
+};
+
+// CONFIRMATION DEADLINE DISPLAY (for pending bookings)
+const ConfirmationDeadline = ({ dateStr, timeStr }: { dateStr: string; timeStr: string }) => {
+  const apptTime = new Date(`${dateStr}T${timeStr}:00+05:30`);
+  if (isNaN(apptTime.getTime())) return null;
+  
+  const now = new Date();
+  if (apptTime <= now) return null;
+  
+  const formatted = apptTime.toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric'
+  });
+  
+  // Format time in 12h
+  const [hours, minutes] = timeStr.split(':').map(Number);
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  const h12 = hours % 12 || 12;
+  const timeFormatted = `${h12}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+  
+  return (
+    <div className="mt-3 p-3 bg-amber-500/5 border border-amber-500/10 rounded-2xl text-xs text-amber-700/80 font-light flex items-start gap-2">
+      <AlertTriangle size={13} className="shrink-0 mt-0.5 text-amber-500" />
+      <div>
+        <span className="font-medium">Confirmation required before:</span>
+        <span className="ml-1">{formatted} at {timeFormatted}</span>
+      </div>
     </div>
   );
 };
@@ -253,7 +479,7 @@ const Timeline = ({ history }: { history: any[] }) => {
             transition={{ duration: 0.3 }}
             className="overflow-hidden"
           >
-            <div className="mt-4 pl-4 border-l-2 border-[color:var(--gold)]/20 space-y-4 py-1">
+            <div className="mt-4 ml-3 pl-4 border-l-2 border-[color:var(--gold)]/20 space-y-4 py-1">
               {sortedHistory.map((event, idx) => {
                 const dateObj = new Date(event.changedAt);
                 const dateStr = dateObj.toLocaleDateString("en-US", {
@@ -268,7 +494,7 @@ const Timeline = ({ history }: { history: any[] }) => {
                 
                 return (
                   <div key={idx} className="relative pl-6">
-                    <div className={`absolute left-[-23.5px] top-[4px] w-2.5 h-2.5 rounded-full border-2 bg-[color:var(--cream)] transition-all duration-300 ${
+                    <div className={`absolute left-[-21px] top-[4px] w-2.5 h-2.5 rounded-full border-2 bg-[color:var(--cream)] transition-all duration-300 ${
                       idx === 0 ? "border-[color:var(--gold)] bg-[color:var(--gold)]" : "border-[color:var(--charcoal)]/30"
                     }`} />
                     
@@ -316,6 +542,20 @@ function BookingsDashboard() {
   const [isSearching, setIsSearching] = useState(false);
   const [searchedBookings, setSearchedBookings] = useState<Booking[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
+  // Tick counter for real-time re-evaluation (increments every 10s)
+  const [tick, setTick] = useState(0);
+  
+  // Last checked state for footer trust indicators
+  const [lastCheckedTime, setLastCheckedTime] = useState<Date | null>(null);
+
+  const lastCheckedText = useMemo(() => {
+    if (!lastCheckedTime) return "";
+    const diffMs = Date.now() - lastCheckedTime.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 1) return "Updated just now";
+    if (diffMins === 1) return "Last checked 1 minute ago";
+    return `Last checked ${diffMins} minutes ago`;
+  }, [lastCheckedTime, tick]);
 
   // Modals state
   const [rescheduleBooking, setRescheduleBooking] = useState<Booking | null>(null);
@@ -335,6 +575,22 @@ function BookingsDashboard() {
   const [calendarMenuOpen, setCalendarMenuOpen] = useState<string | null>(null);
 
   const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+
+  // Real-time auto-expiry: re-evaluate booking states every 10 seconds
+  useEffect(() => {
+    if (searchedBookings.length === 0) return;
+    const interval = setInterval(() => setTick(t => t + 1), 10000);
+    return () => clearInterval(interval);
+  }, [searchedBookings.length]);
+
+  // Memoized bookings with evaluated statuses (recomputed on tick or data change)
+  const evaluatedBookings = useMemo(() => {
+    return searchedBookings.map(b => ({
+      ...b,
+      status: evaluateClientStatus(b),
+    }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchedBookings, tick]);
 
   const handleLookupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -366,6 +622,7 @@ function BookingsDashboard() {
       if (res.ok) {
         if (resData.success && resData.data) {
           setSearchedBookings(resData.data);
+          setLastCheckedTime(new Date());
           setHasSearched(true);
           toast.success(`Found ${resData.data.length} appointments`);
         }
@@ -388,24 +645,20 @@ function BookingsDashboard() {
   };
 
   const handleOpenReschedule = (booking: Booking) => {
-    if (booking.status === "completed") {
-      toast.error("Completed appointments cannot be rescheduled.");
-      return;
-    }
-    if (booking.status === "cancelled") {
-      toast.error("Cancelled appointments cannot be rescheduled.");
+    if (!isActionable(booking)) {
+      toast.error("This booking can no longer be rescheduled.");
       return;
     }
     if ((booking.rescheduleCount || 0) >= 2) {
       toast.error("You have reached the maximum number of allowed reschedules. Please contact the salon directly.");
       return;
     }
-    // Verify appointment is at least 4 hours away
-    const appointmentTime = new Date(`${booking.date}T${booking.time}`);
+    // Verify appointment is at least ALLOW_RESCHEDULE_UNTIL_HOURS hours away
+    const appointmentTime = new Date(`${booking.date}T${booking.time}:00+05:30`);
     const now = new Date();
     const diffHours = (appointmentTime.getTime() - now.getTime()) / (1000 * 60 * 60);
-    if (diffHours < 4) {
-      toast.error("Appointments can only be rescheduled at least 4 hours before the scheduled time.");
+    if (diffHours < ALLOW_RESCHEDULE_UNTIL_HOURS) {
+      toast.error(`Appointments can only be rescheduled at least ${ALLOW_RESCHEDULE_UNTIL_HOURS} hours before the scheduled time.`);
       return;
     }
     setNewDate(booking.date);
@@ -433,6 +686,7 @@ function BookingsDashboard() {
       setRescheduleBooking(null);
       if (data.data) {
         setSearchedBookings(prev => prev.map(b => b._id === data.data._id ? data.data : b));
+        setLastCheckedTime(new Date());
       }
     } catch (err: any) {
       toast.error(err.message);
@@ -457,6 +711,7 @@ function BookingsDashboard() {
       setCancelBooking(null);
       if (data.data) {
         setSearchedBookings(prev => prev.map(b => b._id === data.data._id ? data.data : b));
+        setLastCheckedTime(new Date());
       }
     } catch (err: any) {
       toast.error(err.message);
@@ -487,6 +742,7 @@ function BookingsDashboard() {
       setFeedback("");
       if (data.data) {
         setSearchedBookings(prev => prev.map(b => b._id === data.data._id ? data.data : b));
+        setLastCheckedTime(new Date());
       }
     } catch (err: any) {
       toast.error(err.message);
@@ -553,13 +809,14 @@ function BookingsDashboard() {
   };
 
   const renderBookingCard = (booking: Booking, idx: number) => {
-    const isUpcoming = booking.status === "pending" || booking.status === "confirmed";
+    const canActOn = isActionable(booking);
+    const isTerminal = !canActOn && booking.status !== "pending" && booking.status !== "confirmed";
     
-    // Check 4 hours notice
-    const appointmentTime = new Date(`${booking.date}T${booking.time}`);
+    // Check reschedule notice window (2 hours)
+    const appointmentTime = new Date(`${booking.date}T${booking.time}:00+05:30`);
     const now = new Date();
     const diffHours = (appointmentTime.getTime() - now.getTime()) / (1000 * 60 * 60);
-    const isLessThan4Hours = diffHours < 4;
+    const isLessThanRescheduleLimit = diffHours < ALLOW_RESCHEDULE_UNTIL_HOURS;
     
     return (
       <motion.div
@@ -581,10 +838,12 @@ function BookingsDashboard() {
               />
             </div>
             <div>
-              {/* Booking Reference */}
+              {/* Booking Reference + Age */}
               <div className="text-[10px] text-[color:var(--charcoal)]/40 font-mono tracking-wider mb-1 flex items-center gap-1.5">
                 <span className="uppercase font-medium">Ref:</span>
                 <span className="font-bold text-[color:var(--charcoal)]/70">{booking.reference || booking._id.substring(0, 8).toUpperCase()}</span>
+                <span className="mx-1 text-[color:var(--charcoal)]/20">·</span>
+                <BookingAge createdAt={booking.createdAt} />
               </div>
 
               <div className="flex flex-wrap items-center gap-3 mb-2">
@@ -595,6 +854,10 @@ function BookingsDashboard() {
                   booking.status === "confirmed" ? "bg-emerald-500/10 text-emerald-600" :
                   booking.status === "pending" ? "bg-amber-500/10 text-amber-600" :
                   booking.status === "completed" ? "bg-blue-500/10 text-blue-600" :
+                  booking.status === "expired" ? "bg-orange-500/10 text-orange-600" :
+                  booking.status === "no_show" ? "bg-red-500/10 text-red-600" :
+                  booking.status === "rejected" ? "bg-red-500/10 text-red-600" :
+                  isCancelledStatus(booking.status) ? "bg-red-500/10 text-red-600" :
                   "bg-red-500/10 text-red-600"
                 }`}>
                   <StatusIcon status={booking.status} size={10} />
@@ -625,7 +888,8 @@ function BookingsDashboard() {
 
           {/* Booking Card Actions */}
           <div className="flex flex-col items-end gap-2 shrink-0 border-t border-[color:var(--charcoal)]/5 pt-4 md:pt-0 md:border-0 w-full md:w-auto">
-            {isUpcoming && (
+            {/* Reschedule count — only show if reschedules remain */}
+            {canActOn && (booking.rescheduleCount || 0) < 2 && (
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -635,17 +899,26 @@ function BookingsDashboard() {
                 Reschedules Remaining: {Math.max(0, 2 - (booking.rescheduleCount || 0))} of 2
               </motion.div>
             )}
+            
+            {/* Urgent direct response helper above action buttons for pending */}
+            {booking.status === "pending" && (
+              <span className="text-[10px] text-[color:var(--charcoal)]/55 font-light mb-1 md:self-end self-start">
+                Need a faster response? Contact salon directly:
+              </span>
+            )}
+
             <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto justify-start md:justify-end">
-              {isUpcoming ? (
+              {/* ACTIONABLE: Cancel + Reschedule + WhatsApp + Calendar */}
+              {canActOn ? (
                 <>
                   <button
                     onClick={() => handleOpenReschedule(booking)}
-                    disabled={(booking.rescheduleCount || 0) >= 2 || isLessThan4Hours}
+                    disabled={(booking.rescheduleCount || 0) >= 2 || isLessThanRescheduleLimit}
                     title={(booking.rescheduleCount || 0) >= 2 
-                      ? "Maximum reschedule limit reached. Please contact the salon directly." 
-                      : isLessThan4Hours 
-                        ? "Appointments can only be rescheduled at least 4 hours before the scheduled time."
-                        : undefined
+                      ? "Reschedule limit reached" 
+                      : isLessThanRescheduleLimit 
+                        ? `Appointments can only be rescheduled at least ${ALLOW_RESCHEDULE_UNTIL_HOURS} hours before the scheduled time.`
+                        : "Reschedule Appointment"
                     }
                     className="px-4 py-2 border border-[color:var(--charcoal)]/15 rounded-full text-xs font-medium hover:border-[color:var(--gold)] hover:text-[color:var(--gold)] transition-all duration-300 disabled:opacity-40 disabled:hover:border-[color:var(--charcoal)]/15 disabled:hover:text-[color:var(--charcoal)]/65 disabled:cursor-not-allowed cursor-pointer"
                   >
@@ -660,7 +933,7 @@ function BookingsDashboard() {
                   <button
                     onClick={() => triggerWhatsApp(booking)}
                     className="p-2 bg-emerald-500/10 text-emerald-600 rounded-full hover:bg-emerald-500/20 transition-all duration-300 cursor-pointer"
-                    title="WhatsApp Support"
+                    title="Contact Salon"
                   >
                     <MessageCircle size={16} />
                   </button>
@@ -719,7 +992,9 @@ function BookingsDashboard() {
                   </div>
                 </>
               ) : (
+                /* TERMINAL: Book Again + Review + Contact Salon */
                 <>
+                  {/* Leave Review — only for completed */}
                   {booking.status === "completed" && !booking.review && (
                     <button
                       onClick={() => setReviewBooking(booking)}
@@ -729,12 +1004,14 @@ function BookingsDashboard() {
                     </button>
                   )}
 
+                  {/* Review badge */}
                   {booking.status === "completed" && booking.review && (
                     <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-500/5 border border-amber-500/10 rounded-full text-[11px] text-amber-600 font-medium">
                       <Star size={12} fill="currentColor" /> {booking.review.rating} Reviewed
                     </div>
                   )}
 
+                  {/* Book Again */}
                   <button
                     onClick={() => handleBookAgain(booking)}
                     className="px-4 py-2 bg-[color:var(--charcoal)] text-[color:var(--cream)] rounded-full text-xs font-medium hover:bg-[color:var(--gold)] hover:text-[color:var(--charcoal)] transition-all duration-300 cursor-pointer"
@@ -742,14 +1019,13 @@ function BookingsDashboard() {
                     Book Again
                   </button>
 
-                  {booking.status === "cancelled" && (
+                  {/* Contact Salon — for expired, no_show, cancelled_by_salon, rejected */}
+                  {(booking.status === "expired" || booking.status === "no_show" || booking.status === "cancelled_by_salon" || booking.status === "rejected") && (
                     <button
-                      onClick={() => handleOpenReschedule(booking)}
-                      disabled={(booking.rescheduleCount || 0) >= 2}
-                      title={(booking.rescheduleCount || 0) >= 2 ? "Maximum reschedule limit reached. Please contact the salon directly." : undefined}
-                      className="px-4 py-2 border border-[color:var(--charcoal)]/15 rounded-full text-xs font-medium hover:border-[color:var(--gold)] hover:text-[color:var(--gold)] transition-all duration-300 disabled:opacity-40 disabled:hover:border-[color:var(--charcoal)]/15 disabled:hover:text-[color:var(--charcoal)]/65 disabled:cursor-not-allowed cursor-pointer"
+                      onClick={() => triggerWhatsApp(booking)}
+                      className="px-4 py-2 border border-emerald-500/20 text-emerald-600 rounded-full text-xs font-medium hover:bg-emerald-500/5 transition-all duration-300 flex items-center gap-1.5 cursor-pointer"
                     >
-                      Reschedule
+                      <MessageCircle size={13} /> Contact Salon
                     </button>
                   )}
                 </>
@@ -761,13 +1037,18 @@ function BookingsDashboard() {
         {/* Visual Journey Tracker */}
         <VisualJourneyTracker status={booking.status} />
 
-        {/* Live Countdown */}
-        {booking.status === "confirmed" && (
-          <AppointmentCountdown dateStr={booking.date} timeStr={booking.time} />
+        {/* Live Countdown — for pending and confirmed upcoming bookings */}
+        {(booking.status === "pending" || booking.status === "confirmed") && (
+          <AppointmentCountdown dateStr={booking.date} timeStr={booking.time} status={booking.status} />
+        )}
+
+        {/* Confirmation Deadline — for pending bookings */}
+        {booking.status === "pending" && (
+          <ConfirmationDeadline dateStr={booking.date} timeStr={booking.time} />
         )}
 
         {/* Status Info Card */}
-        <StatusInfoCard status={booking.status} />
+        <StatusInfoCard status={booking.status} booking={booking} />
 
         {/* Status History Timeline */}
         {booking.statusHistory && booking.statusHistory.length > 0 && (
@@ -880,6 +1161,12 @@ function BookingsDashboard() {
                 <h1 className="font-display text-3xl md:text-4xl font-light tracking-tight text-[color:var(--charcoal)]">
                   {searchedBookings.length === 0 ? "No Appointments Found" : `Found ${searchedBookings.length} Appointment${searchedBookings.length === 1 ? "" : "s"}`}
                 </h1>
+                {lastCheckedText && (
+                  <p className="text-[10px] text-[color:var(--charcoal)]/40 mt-2 font-mono flex items-center justify-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block" />
+                    {lastCheckedText}
+                  </p>
+                )}
               </div>
 
               {searchedBookings.length === 0 ? (
@@ -910,7 +1197,7 @@ function BookingsDashboard() {
                 </motion.div>
               ) : (
                 <div className="space-y-6">
-                  {searchedBookings.map((booking, idx) => renderBookingCard(booking, idx))}
+                  {evaluatedBookings.map((booking, idx) => renderBookingCard(booking, idx))}
 
                   <div className="pt-6 text-center">
                     <button

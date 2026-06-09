@@ -7,6 +7,16 @@ import Admin from '../models/Admin.js'
 import asyncHandler from '../utils/asyncHandler.js'
 import { sendSuccess, sendError } from '../utils/responseHandler.js'
 import lockInstance from '../utils/lock.js'
+import {
+  BOOKING_STATUSES,
+  ACTIVE_STATUSES,
+  ALLOW_CANCEL_UNTIL_HOURS,
+  ALLOW_RESCHEDULE_UNTIL_HOURS,
+  evaluateBookingStatus,
+  evaluateBookingsArray,
+  isTerminalStatus,
+  getAppointmentDateTime,
+} from '../services/bookingStatusService.js'
 
 // Helper conversion functions
 const timeToMinutes = (timeStr) => {
@@ -72,7 +82,7 @@ const getActiveBookingCount = async (phone) => {
   if (!phone) return 0
   return await Booking.countDocuments({
     phone: phone.trim(),
-    status: { $in: ['pending', 'confirmed'] }
+    status: { $in: ACTIVE_STATUSES }
   })
 }
 
@@ -82,7 +92,7 @@ export const checkBookingConflict = async (artistId, stylistName, date, timeStr,
 
   const query = {
     date,
-    status: { $in: ['pending', 'confirmed', 'completed'] }
+    status: { $in: [BOOKING_STATUSES.PENDING, BOOKING_STATUSES.CONFIRMED, BOOKING_STATUSES.COMPLETED] }
   }
 
   const artistIdStr = artistId ? artistId.toString() : null
@@ -257,7 +267,7 @@ export const getBookings = asyncHandler(async (req, res) => {
     if (userId) query.$or.push({ userId: userId.trim() })
 
     const bookings = await Booking.find(query).sort({ date: -1, time: -1 })
-    return sendSuccess(res, bookings, 'Bookings retrieved successfully')
+    return sendSuccess(res, evaluateBookingsArray(bookings), 'Bookings retrieved successfully')
   }
 
   // Otherwise, require Admin login
@@ -288,7 +298,7 @@ export const getBookings = asyncHandler(async (req, res) => {
         hasConflict
       }
     })
-    return sendSuccess(res, enrichedBookings, 'Bookings retrieved successfully')
+    return sendSuccess(res, evaluateBookingsArray(enrichedBookings), 'Bookings retrieved successfully')
   }
 
   return sendError(res, 'Query parameter (phone, email, or userId) required to retrieve bookings', 400)
@@ -307,7 +317,9 @@ export const getBookingById = asyncHandler(async (req, res) => {
     return sendError(res, 'Booking not found', 404)
   }
 
-  sendSuccess(res, booking, 'Booking retrieved successfully')
+  // Evaluate effective status at read-time
+  const evaluated = evaluateBookingsArray([booking])
+  sendSuccess(res, evaluated[0], 'Booking retrieved successfully')
 })
 
 // @desc    Reschedule a booking
@@ -325,12 +337,20 @@ export const rescheduleBooking = asyncHandler(async (req, res) => {
     return sendError(res, 'Booking not found', 404)
   }
 
-  // Prevent rescheduling cancelled/completed appointments
-  if (booking.status === 'cancelled') {
-    return sendError(res, 'Cancelled appointments cannot be rescheduled.', 400)
-  }
-  if (booking.status === 'completed') {
-    return sendError(res, 'Completed appointments cannot be rescheduled.', 400)
+  // Evaluate effective status before checking
+  const effectiveStatus = evaluateBookingStatus(booking)
+
+  // Prevent rescheduling terminal bookings
+  if (isTerminalStatus(effectiveStatus)) {
+    const labels = {
+      [BOOKING_STATUSES.CANCELLED_BY_USER]: 'Cancelled',
+      [BOOKING_STATUSES.CANCELLED_BY_SALON]: 'Cancelled',
+      [BOOKING_STATUSES.COMPLETED]: 'Completed',
+      [BOOKING_STATUSES.EXPIRED]: 'Expired',
+      [BOOKING_STATUSES.NO_SHOW]: 'Missed',
+      [BOOKING_STATUSES.REJECTED]: 'Rejected',
+    }
+    return sendError(res, `${labels[effectiveStatus] || 'Terminal'} appointments cannot be rescheduled.`, 400)
   }
 
   // Verify rescheduleCount < 2
@@ -338,13 +358,16 @@ export const rescheduleBooking = asyncHandler(async (req, res) => {
     return sendError(res, 'You have reached the maximum number of allowed reschedules. Please contact the salon directly.', 400)
   }
 
-  // Verify appointment is at least 4 hours away
-  const appointmentTime = new Date(`${booking.date}T${booking.time}`)
+  // Verify appointment is at least ALLOW_RESCHEDULE_UNTIL_HOURS away (IST-safe)
+  const appointmentTime = getAppointmentDateTime(booking)
   const now = new Date()
+  if (!appointmentTime) {
+    return sendError(res, 'Invalid appointment date/time.', 400)
+  }
   const diffHours = (appointmentTime.getTime() - now.getTime()) / (1000 * 60 * 60)
 
-  if (diffHours < 4) {
-    return sendError(res, 'Appointments can only be rescheduled at least 4 hours before the scheduled time.', 400)
+  if (diffHours < ALLOW_RESCHEDULE_UNTIL_HOURS) {
+    return sendError(res, `Appointments can only be rescheduled at least ${ALLOW_RESCHEDULE_UNTIL_HOURS} hours before the scheduled time.`, 400)
   }
 
   // 2-hour advance booking rule for the new time (except for admins)
@@ -398,19 +421,33 @@ export const cancelBooking = asyncHandler(async (req, res) => {
     return sendError(res, 'Booking not found', 404)
   }
 
-  if (booking.status === 'completed') {
-    return sendError(res, 'Cannot cancel a completed appointment', 400)
+  // Evaluate effective status
+  const effectiveStatus = evaluateBookingStatus(booking)
+
+  if (isTerminalStatus(effectiveStatus)) {
+    return sendError(res, 'This booking can no longer be cancelled.', 400)
   }
 
-  booking.status = 'cancelled'
+  // Enforce cancellation window: must cancel at least ALLOW_CANCEL_UNTIL_HOURS before appointment
+  const appointmentTime = getAppointmentDateTime(booking)
+  const now = new Date()
+  if (appointmentTime) {
+    const hoursUntil = (appointmentTime.getTime() - now.getTime()) / (1000 * 60 * 60)
+    if (hoursUntil < ALLOW_CANCEL_UNTIL_HOURS) {
+      return sendError(res, `Cancellations must be made at least ${ALLOW_CANCEL_UNTIL_HOURS} hour before the appointment time.`, 400)
+    }
+  }
+
+  booking.status = BOOKING_STATUSES.CANCELLED_BY_USER
   booking.statusHistory.push({
-    status: 'Cancelled',
+    status: 'Cancelled by Customer',
     changedAt: new Date(),
     changedBy: 'Customer'
   })
   await booking.save()
 
-  sendSuccess(res, booking, 'Booking cancelled successfully')
+  const evaluated = evaluateBookingsArray([booking])
+  sendSuccess(res, evaluated[0], 'Booking cancelled successfully')
 })
 
 // @desc    Submit review for completed booking
@@ -443,9 +480,25 @@ export const reviewBooking = asyncHandler(async (req, res) => {
 // @route   PATCH /api/bookings/:id/status
 // @access  Private (Admin)
 export const updateBookingStatus = asyncHandler(async (req, res) => {
-  const { status } = req.body
+  let { status } = req.body
 
-  if (!['pending', 'confirmed', 'completed', 'cancelled'].includes(status)) {
+  // Map legacy 'cancelled' from admin to 'cancelled_by_salon'
+  if (status === 'cancelled') {
+    status = BOOKING_STATUSES.CANCELLED_BY_SALON
+  }
+
+  const validAdminStatuses = [
+    BOOKING_STATUSES.PENDING,
+    BOOKING_STATUSES.CONFIRMED,
+    BOOKING_STATUSES.COMPLETED,
+    BOOKING_STATUSES.CANCELLED_BY_SALON,
+    BOOKING_STATUSES.CANCELLED_BY_USER,
+    BOOKING_STATUSES.REJECTED,
+    BOOKING_STATUSES.EXPIRED,
+    BOOKING_STATUSES.NO_SHOW,
+  ]
+
+  if (!validAdminStatuses.includes(status)) {
     return sendError(res, 'Invalid status update requested', 400)
   }
 
@@ -456,15 +509,25 @@ export const updateBookingStatus = asyncHandler(async (req, res) => {
   }
 
   booking.status = status
-  const friendlyStatus = status.charAt(0).toUpperCase() + status.slice(1);
+  const friendlyLabels = {
+    pending: 'Pending',
+    confirmed: 'Confirmed',
+    completed: 'Completed',
+    cancelled_by_salon: 'Cancelled by Salon',
+    cancelled_by_user: 'Cancelled by Customer',
+    rejected: 'Rejected',
+    expired: 'Expired',
+    no_show: 'No-Show',
+  }
   booking.statusHistory.push({
-    status: friendlyStatus,
+    status: friendlyLabels[status] || status,
     changedAt: new Date(),
     changedBy: 'Salon Admin'
   })
   await booking.save()
 
-  sendSuccess(res, booking, `Booking status updated to ${status}`)
+  const evaluated = evaluateBookingsArray([booking])
+  sendSuccess(res, evaluated[0], `Booking status updated to ${status}`)
 })
 
 // @desc    Delete booking
@@ -527,7 +590,7 @@ export const getAvailableSlots = asyncHandler(async (req, res) => {
   // Query bookings for logging
   const bookingsQuery = {
     date,
-    status: { $in: ['pending', 'confirmed', 'completed'] }
+    status: { $in: [BOOKING_STATUSES.PENDING, BOOKING_STATUSES.CONFIRMED, BOOKING_STATUSES.COMPLETED] }
   }
   if (artist?._id && artistName) {
     bookingsQuery.$or = [
@@ -607,11 +670,13 @@ export const lookupBooking = asyncHandler(async (req, res) => {
     return sendError(res, 'No appointments found for this name and phone number.', 404)
   }
 
-  // Return bookings array
+  // Evaluate effective statuses before returning
+  const evaluated = evaluateBookingsArray(bookings)
+
   return res.status(200).json({
     success: true,
     message: 'Bookings retrieved successfully',
-    data: bookings,
-    bookings: bookings
+    data: evaluated,
+    bookings: evaluated
   })
 })

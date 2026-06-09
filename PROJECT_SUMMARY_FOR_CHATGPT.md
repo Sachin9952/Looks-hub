@@ -1,367 +1,175 @@
 # Looks-Hub: Luxury Salon Booking & Management Platform
-## Complete Project Overview for Enhancement Suggestions
+## Comprehensive Workflow and Architecture Summary for LLMs/ChatGPT
+
+This document provides a complete, accurate, and up-to-date overview of the **Looks-Hub** project architecture, workflows, database models, and business logic. It includes the recently refactored Customer Booking Lookup System.
 
 ---
 
-## 📋 PROJECT DESCRIPTION
+## 📋 1. PROJECT OVERVIEW & TECH STACK
 
-**Looks-Hub** is a premium unisex salon & academy platform built with:
-- **Frontend**: React 18 + TypeScript + TanStack Router
-- **Backend**: Node.js + Express.js + MongoDB
-- **Deployment**: Vercel (frontend) + Render (backend)
-- **File Storage**: Cloudinary for image management
+**Looks-Hub** is a premium unisex salon & academy platform. It is designed to offer a premium, glassmorphic dark-mode customer experience and a complete administration backend.
 
----
-
-## 🎯 CURRENT FEATURES & FUNCTIONALITY
-
-### **1. CORE MODULES**
-
-#### **A. Booking System**
-- Multi-step appointment wizard (4 steps)
-  - Step 1: Select service category
-  - Step 2: Choose stylist/artist
-  - Step 3: Pick date & time with real-time availability
-  - Step 4: Enter customer details (name, phone, email, notes)
-- Smart rescheduling (max 2 reschedules, 4-hour advance notice)
-- Appointment cancellation with status management
-- Customer review & rating system (1-5 stars) after service completion
-- Real-time booking confirmation notifications
-- Status tracking: pending → confirmed → completed → cancelled
-
-#### **B. Admin Dashboard**
-- Real-time statistics dashboard showing:
-  - Total bookings count
-  - Pending/Confirmed/Completed/Cancelled breakdown
-  - Active services & artists count
-  - Customer testimonials metrics
-- Management panels for:
-  - Bookings (view, filter, update status, cancel)
-  - Services (create, edit, delete, toggle active/popular)
-  - Artists/Stylists (add profiles, manage details, upload photos)
-  - Gallery (upload portfolio images, mark as featured)
-  - Testimonials (view, manage, mark as featured)
-  - Offers & Packages
-  - Team member management
-
-#### **C. Public Website**
-- Landing page with hero section
-- Services showcase with filtering
-- Artist/stylist gallery with ratings
-- Customer testimonials carousel
-- Portfolio/work gallery with categories
-- Instagram feed integration
-- Contact information & location
-- Special offers display
-- Sticky action buttons (Call, WhatsApp)
-
-#### **D. Authentication & Security**
-- JWT-based admin authentication (7-day token expiration)
-- bcrypt password hashing
-- Role-based access control (admin-only protected routes)
-- CORS configured for development & production
-- Secure token storage in localStorage
-- Protected API endpoints with Bearer token validation
-
-#### **E. Image Management**
-- Cloudinary integration for cloud storage
-- Automatic WebP format conversion
-- Image optimization (800x1000 crop, face-aware gravity)
-- Multer middleware for file uploads (5MB limit)
-- Support for JPG, JPEG, PNG, WebP formats
-- Public ID tracking for image management/deletion
-- CDN delivery for fast load times
+| Layer | Technologies |
+|---|---|
+| **Frontend** | React 18, TypeScript, TanStack Router, TanStack Query, Tailwind CSS, Framer Motion, Radix UI (shadcn), Sonner Toast |
+| **Backend** | Node.js, Express.js, MongoDB (Mongoose) |
+| **Storage & Optimization** | Cloudinary (Multer for file handling, auto-WebP conversion, image cropping, face-aware gravity) |
+| **Security** | JWT Auth (Admin), bcrypt (password hashing), IP-based rate limiting, input validation (express-validator) |
+| **Deployment** | Vercel (Frontend) + Render (Backend) |
 
 ---
 
-## 🗄️ DATABASE MODELS
+## 🔄 2. CORE WORKFLOWS
 
-### **Admin**
+### A. Appointment Booking Flow (Customer)
+The booking process uses a type-safe multi-step wizard:
+1. **Service Selection**: Services are categorized (Hair, Makeup, Skin, Nails, Grooming). The customer selects a service.
+2. **Artist Selection**: The customer selects an artist/stylist or chooses "Any Stylist" (Professional Team).
+3. **Date & Time Selection**:
+   - Time slots are queried dynamically from `/api/bookings/available-slots`.
+   - Displays slots between working hours (default: `09:00` - `18:00`).
+   - Standard booking requires at least **2 hours advance notice** (same-day bookings starting within 2 hours are filtered out).
+4. **Customer Details**: Customer enters Name, Phone Number, Email, and optional Notes.
+   - Saves booking to database, generates a sequential booking reference (`LH-YYYY-XXXXX`), and defaults status to `pending`.
+
+### B. Booking Lookup Flow (Customer)
+Refactored to prioritize ease of use (not requiring reference IDs) and secure data retrieval:
+1. **Search Form**: The user enters **Customer Name** and **Phone Number**.
+2. **Rate Limiting**: Throttled to a maximum of **5 lookup requests per minute per IP** to prevent abuse.
+3. **Database Query**: Queries using `Booking.find({ customerName, phone })` with trimmed inputs and a case-insensitive regex for the name.
+4. **Security & Enumeration Prevention**: Mismatches and nonexistent names/numbers return a uniform `404` error ("No appointments found..."), preventing attackers from verifying customer data.
+5. **No Persistence**: Results are held in transient React state and cleared on page refresh (no `localStorage` or session cache storage).
+6. **Result View**: Renders all matched bookings sorted descending by date/time (newest first).
+
+### C. Booking Management (Customer Actions)
+From the lookup result view, every appointment card displays its visual tracker, timeline, and actions:
+- **Status Journey Tracker**: Displays progress: `Booked` → `Confirmed` → `Completed` (or `Cancelled`).
+- **Reschedule**:
+  - Requires at least **4 hours advance notice** before the scheduled time.
+  - Restricted to a maximum of **2 reschedules** per appointment.
+  - Renders slot selection with the same 2-hour advance booking rule for the new time.
+- **Cancel**:
+  - Cancel is blocked on completed bookings.
+  - Updates status to `cancelled` and appends status history.
+- **Leave Review**:
+  - Permitted only on bookings with `completed` status.
+  - Customer can submit a 1-to-5 star rating and feedback text.
+- **Timeline**: Expandable list displaying the lifecycle milestones (status changes, timestamps, and who made the change).
+- **Countdown**: Shows a live ticker (Days, Hours, Minutes) counting down to the confirmed appointment time.
+
+### D. Admin Management Workflow
+1. **Admin Portal**: Authentication via `POST /api/auth/login` returning a JWT token valid for 7 days.
+2. **Dashboard Overview**: Displays overall stats (Total bookings, active services, artists) and status distributions.
+3. **Enriched Conflict Detection**: Admin booking list highlights scheduling overlaps (conflict flags) where an artist is double-booked on matching date/times.
+4. **Admin Booking Overrides**: Admins have bypass privileges to skip:
+   - Same-day 2-hour advance booking limit.
+   - The customer limit of maximum 3 active appointments.
+5. **Entity Management Panels**: Full CRUD panels for Services (price, category, popular toggle), Artists (specialty, experience, profile photo), Testimonials, Gallery elements, and Special Offers.
+
+---
+
+## 🗄️ 3. DATABASE MODELS & SCHEMAS
+
+### **Booking Schema**
+Tracks the state of all customer appointments:
 ```javascript
-- name: String (required)
-- email: String (unique, required)
-- password: String (hashed)
-- role: 'admin'
-- timestamps
+{
+  customerName: { type: String, required: true, trim: true },
+  phone: { type: String, required: true, trim: true },
+  email: { type: String, trim: true, lowercase: true },
+  service: { type: String, required: true, trim: true },
+  serviceId: { type: mongoose.Schema.Types.ObjectId, ref: 'Service' },
+  barberId: { type: String, trim: true },
+  stylist: { type: String, trim: true },
+  userId: { type: String, trim: true },
+  price: { type: Number },
+  duration: { type: String, trim: true },
+  durationMinutes: { type: Number, default: 60 },
+  date: { type: String, required: true }, // YYYY-MM-DD
+  time: { type: String, required: true }, // HH:MM
+  notes: { type: String, trim: true },
+  status: { type: String, enum: ['pending', 'confirmed', 'completed', 'cancelled'], default: 'pending' },
+  rescheduleCount: { type: Number, default: 0 },
+  review: {
+    rating: { type: Number, min: 1, max: 5 },
+    feedback: { type: String, trim: true }
+  },
+  reference: { type: String, unique: true, sparse: true }, // Sequentially generated, e.g. LH-2026-00004
+  statusHistory: [
+    {
+      status: { type: String, required: true },
+      changedAt: { type: Date, default: Date.now },
+      changedBy: { type: String, required: true }
+    }
+  ]
+}
 ```
 
-### **Artist/Stylist**
+### **Service Schema**
+Defines salon offerings:
 ```javascript
-- name: String (required)
-- specialty: String (e.g., "Hair Styling", "Makeup")
-- years: Number (experience)
-- rating: Number (1-5, default: 5.0)
-- imageUrl: String (Cloudinary URL)
-- imagePublicId: String (for deletion/update)
-- timestamps
+{
+  name: { type: String, required: true, trim: true },
+  category: { type: String, required: true, trim: true }, // Hair, Makeup, Skin, Nails, Grooming
+  price: { type: Number, required: true },
+  duration: { type: String, required: true }, // e.g. "45 Min"
+  description: { type: String, trim: true },
+  isPopular: { type: Boolean, default: false },
+  isActive: { type: Boolean, default: true }
+}
 ```
 
-### **Booking**
+### **Artist/Stylist Schema**
+Stylist profiles with experience and ratings:
 ```javascript
-- customerName, phone, email: String
-- service: String
-- serviceId: ObjectId (reference)
-- stylist, barberId: String
-- date, time: String
-- price: Number
-- duration: String (e.g., "60 Min")
-- status: enum ['pending', 'confirmed', 'completed', 'cancelled']
-- notes: String
-- rescheduleCount: Number (max: 2)
-- review: { rating (1-5), feedback }
-- timestamps
-```
-
-### **Service**
-```javascript
-- name: String (required)
-- category: String (Hair, Makeup, Skin, Nails, Grooming)
-- price: Number (required)
-- duration: String (required)
-- description: String
-- isPopular: Boolean (featured on homepage)
-- isActive: Boolean
-- timestamps
-```
-
-### **Gallery**
-```javascript
-- title: String (required)
-- category: String (required)
-- imageUrl: String (required)
-- type: enum ['hair', 'makeup', 'skin', 'nails', 'grooming']
-- isFeatured: Boolean (featured on homepage)
-- timestamps
-```
-
-### **Testimonial**
-```javascript
-- customerName: String (required)
-- rating: Number (1-5, required)
-- review: String (required)
-- source: String (Google Maps, Instagram, Direct)
-- isFeatured: Boolean (featured on homepage)
-- timestamps
+{
+  name: { type: String, required: true },
+  specialty: { type: String, required: true },
+  years: { type: Number, required: true },
+  rating: { type: Number, default: 5.0 },
+  imageUrl: { type: String },
+  imagePublicId: { type: String }
+}
 ```
 
 ---
 
-## 📡 API ENDPOINTS
+## 📡 4. SYSTEM API ARCHITECTURE
 
-### **Auth** (`/api/auth`)
-- `POST /login` - Admin login (returns JWT token)
-- `GET /me` - Get current admin profile (protected)
-- `POST /register-admin` - Create admin account
+### Auth Route (`/api/auth`)
+- `POST /login` - Admin authentication (Returns JWT)
+- `GET /me` - Validates JWT and returns current Admin profile
+- `POST /register-admin` - Instantiates new admin accounts
 
-### **Bookings** (`/api/bookings`)
-- `GET /` - Get all bookings (admin) / search by phone/email (public)
-- `GET /:id` - Get specific booking
-- `POST /` - Create new booking (public)
-- `PATCH /reschedule` - Reschedule appointment
-- `PATCH /cancel` - Cancel appointment
-- `PATCH /:id/status` - Update status (admin only)
-- `POST /review` - Submit review/rating
-- `DELETE /:id` - Delete booking (admin only)
-
-### **Services** (`/api/services`)
-- `GET /` - Get all active services (public)
-- `POST /` - Create service (admin only)
-- `PUT /:id` - Update service (admin only)
-- `DELETE /:id` - Delete service (admin only)
-
-### **Artists** (`/api/artists`)
-- `GET /` - Get all artists (public)
-- `POST /` - Create artist (admin only)
-- `PUT /:id` - Update artist (admin only)
-- `DELETE /:id` - Delete artist (admin only)
-
-### **Gallery** (`/api/gallery`)
-- `GET /` - Get gallery items (public)
-- `POST /` - Add gallery item (admin only)
-- `DELETE /:id` - Remove gallery item (admin only)
-
-### **Testimonials** (`/api/testimonials`)
-- `GET /` - Get testimonials (public)
-- `POST /` - Submit testimonial (public)
-- `DELETE /:id` - Delete testimonial (admin only)
-
-### **Dashboard** (`/api/dashboard`)
-- `GET /stats` - Get dashboard statistics (admin only)
-
-### **Upload** (`/api/upload`)
-- `POST /` - Upload image to Cloudinary (admin only)
+### Bookings Route (`/api/bookings`)
+- `POST /lookup` - Secure customer lookup endpoint. Requires `customerName` and `phone`. Returns all matches sorted descending. Throttled via `lookupRateLimiter`.
+- `POST /` - Creates new booking. Enforces 2-hour advance booking and max 3 active bookings limit rules for clients.
+- `GET /` - Queries all bookings. Accessible only by Authenticated Admins.
+- `GET /available-slots` - Calculates working slot availability for dates/artists.
+- `PATCH /reschedule` - Updates date/time. Validates notice timeframe and maximum reschedule count constraints.
+- `PATCH /cancel` - Customer cancellation. Updates status and timeline.
+- `POST /review` - Logs rating and reviews on completed appointments.
+- `PATCH /:id/status` - Updates booking status (Admin privilege).
+- `DELETE /:id` - Deletes booking document (Admin privilege).
 
 ---
 
-## 🏗️ CLIENT PAGES & ROUTES
+## 🎨 5. FRONTEND PAGE DIRECTORY MAP
 
 | Route | Component | Purpose |
 |---|---|---|
-| `/` | Landing Page | Hero, services, artists, testimonials, gallery |
-| `/services` | Services Page | Service catalog with details |
-| `/services/:id` | Service Detail | Individual service information |
-| `/book` | Booking Wizard | Multi-step appointment booking |
-| `/account/bookings` | Bookings Dashboard | View, reschedule, cancel, review bookings |
-| `/admin/login` | Admin Login | Authentication portal |
-| `/admin/dashboard` | Admin Dashboard | Full management panel |
+| `/` | Landing Page | Hero section, featured reviews, popular services, salon location, sticky contacts |
+| `/services` | Services Catalog | Browsable list of categories and salon pricing |
+| `/book` | Booking System | Multi-step appointment wizard |
+| `/account/bookings` | Bookings Lookup | Customer lookup portal (Customer Name + Phone) with active card displays |
+| `/admin/login` | Login Portal | Admin credential forms |
+| `/admin/dashboard` | Admin Portal | Live statistics graphs, management tables (CRUD artists, services, testimonials) |
 
 ---
 
-## 🎨 UI COMPONENTS (45+ Components)
+## 🛡️ 6. APPLIED SECURITY RULES
 
-**Form Components**: Input, Textarea, Select, Checkbox, Radio, Form, Button, etc.
-
-**Layout Components**: Card, Sidebar, Drawer, Sheet, Dialog, Tabs, Accordion, etc.
-
-**Data Components**: Table, Pagination, DataTable, Skeleton, etc.
-
-**Custom Components**:
-- ImageWithFallback (optimized image loading)
-- Avatar (profile pictures)
-- Badge (status/tags)
-- Breadcrumb (navigation)
-- Calendar (date picker)
-- Carousel (image gallery)
-- Toast notifications
-- Loading spinners
-
----
-
-## 📊 DEPLOYMENT & HOSTING
-
-- **Frontend**: Vercel (https://looks-hub.vercel.app)
-- **Backend**: Render (https://looks-hub.onrender.com)
-- **Database**: MongoDB
-- **Image Storage**: Cloudinary
-- **Domain Management**: Custom domain support
-
----
-
-## 🚀 CURRENT TECH STACK
-
-| Category | Technology |
-|---|---|
-| Frontend | React 18, TypeScript, Tailwind CSS, Framer Motion |
-| Backend | Node.js, Express.js, MongoDB |
-| Router | TanStack Router (Type-safe routing) |
-| State Management | TanStack Query (server caching) |
-| Forms | React Hook Form, Zod validation |
-| UI/UX | shadcn/ui components, Sonner toast |
-| Authentication | JWT, bcrypt |
-| File Handling | Multer, Cloudinary |
-| Styling | CSS-in-JS, Tailwind utilities |
-
----
-
-## ✅ WHAT'S WORKING
-
-- ✅ Complete booking workflow
-- ✅ Admin authentication & authorization
-- ✅ Real-time dashboard with stats
-- ✅ Image upload to Cloudinary
-- ✅ Service & artist management
-- ✅ Customer reviews & ratings
-- ✅ Appointment rescheduling/cancellation
-- ✅ Gallery management
-- ✅ Responsive design
-- ✅ Dark theme luxury styling
-- ✅ Email notifications (via booking system)
-- ✅ CORS security
-- ✅ Cloudinary integration with auto-optimization
-
----
-
-## 🎯 WHAT YOU CAN ASK CHATGPT FOR:
-
-1. **SEO Optimizations**
-   - Meta tags strategy
-   - Schema markup (LocalBusiness, Event, Review)
-   - Sitemap generation
-   - Mobile SEO optimization
-   - Page speed improvements
-   - Structured data for rich snippets
-   - Keywords strategy for salon business
-
-2. **New Features to Add**
-   - Loyalty/rewards program
-   - SMS notifications (Twilio integration)
-   - Email reminders (Nodemailer)
-   - Appointment reminders (24hr before)
-   - Payment gateway integration (Stripe/Razorpay)
-   - Customer profile system
-   - Subscription/package plans
-   - Referral system
-   - Staff availability calendar
-   - Real-time chat support
-   - Video consultation booking
-   - Gift cards/vouchers system
-   - Membership tiers (Basic/Premium/VIP)
-   - Analytics dashboard
-   - Inventory management
-   - Staff performance metrics
-   - Customer CRM system
-
-3. **Performance Improvements**
-   - Image optimization strategies
-   - Lazy loading implementation
-   - Code splitting
-   - Bundle size reduction
-   - Database query optimization
-   - Caching strategies
-   - CDN configuration
-
-4. **Marketing & Growth**
-   - Social media integration
-   - Review automation system
-   - Email marketing automation
-   - Customer retention strategies
-   - Referral program mechanics
-   - Seasonal campaigns
-   - Analytics & tracking
-
-5. **Security Enhancements**
-   - Two-factor authentication
-   - Rate limiting
-   - Input sanitization
-   - SQL injection prevention
-   - DDOS protection
-   - Data encryption
-   - Privacy policy compliance (GDPR)
-
-6. **User Experience**
-   - Progress tracking in booking
-   - Real-time availability display
-   - Appointment notifications
-   - Customer support chatbot
-   - FAQ section
-   - Video testimonials
-   - Virtual tours
-   - Staff bios with certifications
-
----
-
-## 📝 INSTRUCTIONS FOR CHATGPT
-
-When sharing this with ChatGPT, you can say:
-
-> "I have a luxury salon booking and management platform built with React + Express + MongoDB. Here's the complete feature set. Please review it and suggest:
-> 1. SEO optimizations we should implement
-> 2. Key features we should add next
-> 3. Performance improvements
-> 4. User experience enhancements
-> 5. Revenue generation features
-> 6. Security best practices we're missing
-> 
-> Current tech stack: React 18, TypeScript, TanStack Router, Express.js, MongoDB, Cloudinary, Tailwind CSS"
-
----
-
-## 🔗 LINKS
-
-- GitHub Repo: https://github.com/Sachin9952/Looks-hub
-- Live App: https://looks-hub.vercel.app
-- API Base: https://looks-hub.onrender.com/api
-
----
-
-**This document can be directly shared with ChatGPT for enhancement suggestions and optimization recommendations.**
+1. **Throttling**: Public lookup router has a memory cache rate limiter preventing brute-forcing names/phones by limiting lookup requests to 5 per minute per IP.
+2. **Enumeration Mitigation**: If lookup returns no matches, the API returns a generic 404 block preventing database discovery (no disclosure of name or phone validity).
+3. **Admin Bearer Protection**: Sensitive endpoints (bookings query, service modifications, artist deletion) require valid Authorization Headers containing Bearer JWT tokens.
+4. **CORS Safeguards**: CORS headers restricted to verified domains in production and local development environments.

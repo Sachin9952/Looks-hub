@@ -1,4 +1,5 @@
 import mongoose from 'mongoose'
+import { ALL_STATUS_VALUES } from '../services/bookingStatusService.js'
 
 const bookingSchema = new mongoose.Schema({
   customerName: {
@@ -62,7 +63,7 @@ const bookingSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['pending', 'confirmed', 'completed', 'cancelled'],
+    enum: ALL_STATUS_VALUES,
     default: 'pending'
   },
   rescheduleCount: {
@@ -99,6 +100,7 @@ const bookingSchema = new mongoose.Schema({
 bookingSchema.index({ date: 1, barberId: 1, status: 1 })
 bookingSchema.index({ date: 1, stylist: 1, status: 1 })
 bookingSchema.index({ phone: 1, status: 1 })
+bookingSchema.index({ status: 1, date: 1 }) // Scheduler performance
 
 // Pre-save hook to generate unique sequential references and statusHistory
 bookingSchema.pre('save', async function (next) {

@@ -80,8 +80,8 @@ router.patch(
   protectAdmin,
   [
     body('status')
-      .isIn(['pending', 'confirmed', 'completed', 'cancelled'])
-      .withMessage('Status must be pending, confirmed, completed, or cancelled')
+      .isIn(['pending', 'confirmed', 'completed', 'cancelled', 'cancelled_by_user', 'cancelled_by_salon', 'rejected', 'expired', 'no_show'])
+      .withMessage('Invalid booking status')
   ],
   validate,
   updateBookingStatus
